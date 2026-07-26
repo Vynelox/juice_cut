@@ -14,5 +14,5 @@ uniform float u_strength; // 0.0 = Original, 1.0 = MAX CHAOS
 // Pseudo-random function
 
 void main() {
-    outColor = vec4(texture(u_texture, v_texCoord).bgra);
+    outColor = vec4(texture(u_texture, v_texCoord).rgba);
 }

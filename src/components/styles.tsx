@@ -45,8 +45,7 @@ interface DisplayItem {
 const topLevelItems: string[] = ['vynelox-built-in-folder'];
 
 const allDisplayItems: Record<string, DisplayItem> = {
-  'vynelox-built-in-folder': { id: 'vynelox-built-in-folder', label: 'Vynelox built-in', type: 'folder', icon: folderIcon, children: ['plain-folder'] },
-  'plain-folder': { id: 'plain-folder', label: 'plain', type: 'folder', icon: folderIcon, children: ['og-dark', 'og-light', 'monokai', 'lavender', 'cyberpunk', 'oak', 'forest', 'aquatic'] },
+  'vynelox-built-in-folder': { id: 'vynelox-built-in-folder', label: 'By Vynelox', type: 'folder', icon: folderIcon, children: ['og-dark', 'og-light', 'monokai', 'lavender', 'cyberpunk', 'oak', 'forest', 'aquatic'] },
   'og-dark': { id: 'og-dark', label: 'og dark', type: 'theme', icon: ogDarkIcon },
   'og-light': { id: 'og-light', label: 'og light', type: 'theme', icon: ogLightIcon },
   'monokai': { id: 'monokai', label: 'monokai', type: 'theme', icon: monokaiIcon },
@@ -57,13 +56,16 @@ const allDisplayItems: Record<string, DisplayItem> = {
   'aquatic': { id: 'aquatic', label: 'aquatic', type: 'theme', icon: 'M12 12c0-4 3-7 7-7s7 3 7 7-3 7-7 7-7-3-7-7zm-5 0c0-2.5 2-4.5 4.5-4.5S11 9.5 11 12s-2 4.5-4.5 4.5S2 14.5 2 12zm10 0c0-1.5 1-3 3-3s3 1.5 3 3-1 3-3 3-3-1.5-3-3z' },
 };
 
-export const parentMap: Record<string, string | undefined> = {};
-for (const itemId in allDisplayItems) {
-  const item = allDisplayItems[itemId];
-  if (item.type === 'folder' && item.children) {
-    item.children.forEach(childId => { parentMap[childId] = itemId; });
-  }
-}
+export const parentMap: Record<string, string | undefined> = {
+  'og-dark': 'vynelox-built-in-folder',
+  'og-light': 'vynelox-built-in-folder',
+  'monokai': 'vynelox-built-in-folder',
+  'lavender': 'vynelox-built-in-folder',
+  'cyberpunk': 'vynelox-built-in-folder',
+  'oak': 'vynelox-built-in-folder',
+  'forest': 'vynelox-built-in-folder',
+  'aquatic': 'vynelox-built-in-folder',
+};
 
 function getPathLabel(itemId: string | null): string {
   if (!itemId) return 'Styles';

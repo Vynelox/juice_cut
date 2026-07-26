@@ -249,6 +249,8 @@ function AppContent() {
     } catch {}
   }, []);
 
+
+
   // Determine if background should be locked
   const blockBackground = !allowEditsWhenMenuOpen && hasModalOpen;
 
@@ -604,8 +606,12 @@ function AppContent() {
   const rollClip = rollClipId ? clips.find(c => c.id === rollClipId) ?? null : null;
   const rollMedia = rollClip ? mediaItems.get(rollClip.mediaId) ?? null : null;
 
+
+
+  //add cursor: 'none' in the style=({}) section in the
+  //<div id="editor-container"> 
   return (
-    <div id="editor-container" style={{ width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <div id="editor-container" style={{ width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column'}}>
     <div className="app-shell">
       {/* Background blocking overlay: sits below modal/torus overlays (z-index 199 vs 200) */}
       {blockBackground && (
