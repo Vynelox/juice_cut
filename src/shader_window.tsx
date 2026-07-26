@@ -3,25 +3,12 @@
  * 
  * This is loaded by overlay.html in Window B (the transparent overlay).
  * It sets up a WebGL2 canvas that receives raw pixel data from the app window
- * via getUserMedia or getDisplayMedia, then renders it through a GLSL shader.
+ * via getDisplayMedia, then renders it through a GLSL shader.
  * 
- * TWO CAPTURE METHODS:
+ * The main.cjs process intercepts display media requests using
+ * session.defaultSession.setDisplayMediaRequestHandler to provide the exact window.
  * 
- * Option A - desktopCapturer (default):
- * - Uses desktopCapturer.getSources() in main.cjs to find window by title
- * - Returns window:PID:ID format
- * - Uses getUserMedia with chromeMediaSource: 'desktop'
- * - More reliable, works consistently in Electron
- * 
- * Option B - mediaSourceId:
- * - Uses app_window.webContents.getMediaSourceId() to get base64 ID
- * - Uses getDisplayMedia with Electron-specific constraints to pre-select source
- * - May require user permission dialog in some cases
- * 
- * CONFIGURATION:
- * Set "capture_method" in config.json:
- * - "desktopCapturer" (default) -> Option A
- * - "mediaSourceId" -> Option B
+ * NO CONFIG NEEDED: The main process handles window selection automatically.
  */
 
 console.log('PARSE: shader_window.tsx loaded');
@@ -86,6 +73,12 @@ function createProgram(gl: WebGL2RenderingContext, vsSource: string, fsSource: s
 async function main() {
   console.log('running async function main()');
 
+  let stream: MediaStream | null = null;
+  let videoTrack: MediaStreamTrack | null = null;
+  let processor: MediaStreamTrackProcessor | null = null;
+  let reader: ReadableStreamDefaultReader<VideoFrame> | null = null;
+  let stopped = false;
+
   try {
     console.log('CHECKPOINT: main() entered, beginning execution');
 
@@ -132,6 +125,7 @@ async function main() {
     const uTextureLoc = gl!.getUniformLocation(program, 'u_texture');
     const uResolutionLoc = gl!.getUniformLocation(program, 'u_resolution');
     const uTimeLoc = gl!.getUniformLocation(program, 'u_time');
+    const uStrengthLoc = gl!.getUniformLocation(program, 'u_strength');
     console.log('Overlay: Shader program created successfully');
 
     // Set canvas pixel size to window size
@@ -189,107 +183,37 @@ async function main() {
     }
     console.log('CHECKPOINT: notifyShaderWindowReady() called');
 
-    // Load config to determine capture method
-    let captureMethod: 'desktopCapturer' | 'mediaSourceId' = 'desktopCapturer';
+    // Step 2: Request display media (Main process will intercept via setDisplayMediaRequestHandler)
+    console.log('PIPELINE: Requesting display media (Main process will intercept)');
     try {
-      const cfg = await fetch('/config.json').then(r => r.json()).catch(() => null);
-      console.log('CHECKPOINT: fetch(/config.json) complete, cfg =', cfg ? 'success' : 'null');
-      if (cfg?.capture_method) {
-        captureMethod = cfg.capture_method;
-        console.log('Overlay: Using capture method:', captureMethod);
-      } else {
-        console.log('Overlay: No capture_method in config, defaulting to desktopCapturer');
-      }
-    } catch (e) {
-      console.warn('Overlay: Failed to fetch config, using default desktopCapturer:', e);
-    }
-
-    // Step 1: Get window source ID based on capture method
-    console.log('Overlay: Getting window source ID...');
-    let sourceId: string | null = null;
-
-    if (captureMethod === 'desktopCapturer') {
-      // Option A: Use desktopCapturer method (window:PID:ID format)
-      console.log('CHECKPOINT: captureMethod is desktopCapturer, calling getWindowSourceDesktopId()');
-      sourceId = await api.getWindowSourceDesktopId();
-      console.log('CHECKPOINT: getWindowSourceDesktopId() returned:', sourceId);
-      if (sourceId && !sourceId.startsWith('window:')) {
-        console.warn('Overlay: Got invalid desktop ID format, falling back to mediaSourceId:', sourceId);
-        sourceId = null;
-      }
-    } else {
-      // Option B: Use mediaSourceId method (base64 format)
-      console.log('CHECKPOINT: captureMethod is mediaSourceId, calling getWindowSourceId()');
-      sourceId = await api.getWindowSourceId();
-      console.log('CHECKPOINT: getWindowSourceId() returned:', sourceId);
-      if (sourceId && sourceId.startsWith('window:')) {
-        console.warn('Overlay: Got invalid mediaSourceId format, falling back to desktopCapturer:', sourceId);
-        sourceId = null;
-      }
-    }
-
-    // Fallback to the other method if the first one fails
-    if (!sourceId) {
-      console.log('Overlay: Attempting fallback capture method...');
-      const fallbackMethod = captureMethod === 'desktopCapturer' ? 'mediaSourceId' : 'desktopCapturer';
-      console.log('Overlay: Trying fallback method:', fallbackMethod);
-
-      if (fallbackMethod === 'desktopCapturer') {
-        sourceId = await api.getWindowSourceDesktopId();
-      } else {
-        sourceId = await api.getWindowSourceId();
-      }
-      console.log('CHECKPOINT: fallback returned:', sourceId);
-    }
-
-    if (!sourceId) {
-      console.error('Overlay: Failed to get window source ID with both methods');
-      return;
-    }
-    console.log('Overlay: Got window source ID:', sourceId);
-    console.log('CHECKPOINT: sourceId =', sourceId.substring(0, 20) + '...');
-
-    // Step 2: Create MediaStream using the appropriate method
-    let stream: MediaStream | null = null;
-
-    // Always use desktopCapturer method for now (the working one)
-    console.log('PIPELINE: desktopCapturer -> getUserMedia (window:PID:ID)');
-    console.log('CHECKPOINT: Calling getUserMedia with chromeMediaSource=desktop');
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
+      // This triggers setDisplayMediaRequestHandler in main.cjs
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
         audio: false,
-        video: {
-          chromeMediaSource: 'desktop',
-          chromeMediaSourceId: sourceId,
-        },
-      } as any);
-      console.log('CHECKPOINT: getUserMedia() succeeded, track count:', stream.getVideoTracks().length);
+      });
+      console.log('✅ SUCCESS: MediaStream acquired, track count:', stream.getVideoTracks().length);
+
+      // Continue directly to the MediaStreamTrackProcessor logic
+      videoTrack = stream.getVideoTracks()[0];
+      if (!videoTrack) {
+        console.error('Overlay: No video track in stream');
+        return;
+      }
+
+      processor = new MediaStreamTrackProcessor({ track: videoTrack });
+      reader = processor.readable.getReader();
+      console.log('Overlay: MediaStreamTrackProcessor created');
+
     } catch (e) {
-      console.error('Overlay: getUserMedia failed:', e);
-      // Don't fall back here - we already tried both methods above
+      console.error('❌ getDisplayMedia failed:', e);
       return;
     }
 
-    // Step 3: Create MediaStreamTrackProcessor to get VideoFrames
-    const videoTrack = stream.getVideoTracks()[0];
-    console.log('CHECKPOINT: videoTrack =', videoTrack ? 'success' : 'null');
-    if (!videoTrack) {
-      console.error('Overlay: No video track in stream');
-      stream.getTracks().forEach(t => t.stop());
-      return;
-    }
-
-    const processor = new MediaStreamTrackProcessor({ track: videoTrack });
-    const reader = processor.readable.getReader();
-    console.log('Overlay: MediaStreamTrackProcessor created');
-    console.log('CHECKPOINT: MediaStreamTrackProcessor and reader created');
-
-    // Step 4: Process VideoFrames and upload to WebGL
-    let stopped = false;
+    // Step 3: Process VideoFrames and upload to WebGL
     async function readLoop() {
       while (!stopped) {
         try {
-          const { value, done } = await reader.read();
+          const { value, done } = await reader!.read();
           if (done || !value) break;
 
           const frame = value as VideoFrame;
@@ -316,13 +240,12 @@ async function main() {
           gl!.activeTexture(gl!.TEXTURE0);
           gl!.bindTexture(gl!.TEXTURE_2D, texture);
           gl!.uniform1i(uTextureLoc, 0);
+          gl!.uniform1f(uStrengthLoc, 1.0);
           gl!.bindVertexArray(vao);
           gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4);
 
           const time = performance.now() / 1000.0;
           gl!.uniform1f(uTimeLoc, time);
-
-          console.log('Overlay: VideoFrame uploaded to WebGL, size:', textureWidth, 'x', textureHeight);
 
           // Close the frame to release GPU memory
           frame.close();
@@ -341,8 +264,8 @@ async function main() {
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => {
       stopped = true;
-      reader.cancel();
-      videoTrack.stop();
+      reader?.cancel();
+      videoTrack?.stop();
       stream?.getTracks().forEach(t => t.stop());
       if (vao) gl!.deleteVertexArray(vao);
       if (vbo) gl!.deleteBuffer(vbo);
