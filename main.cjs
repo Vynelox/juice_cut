@@ -20,36 +20,18 @@ let shader_window = null;
 app.whenReady().then(async () => {
   console.log('main.cjs invoked');
   if (SHADER_WINDOW) {
-    shader_window = new BrowserWindow({
+    // 1. Create Window A (Main App) FIRST, so it can be the parent
+    //NOTE: setting skipTaskbar: false DOES NOT WORK for child windows
+    //if its parent window has skipTaskbar: true. so enable skipTaskbar
+    //for both shader and app window depending on which one you want
+    //to make as the parent
+    const appOpacity = BASE_WINDOW_TRANSPARENCY < lowest_possible_opacity ? lowest_possible_opacity : BASE_WINDOW_TRANSPARENCY;
+    app_window = new BrowserWindow({
       width: 1280,
       height: 800,
-      x: 0,
-      y: 0,
       frame: false,
-      transparent: true,
-      backgroundColor: '#00000000',
-      hasShadow: false,
       skipTaskbar: false,
       icon: path.join(__dirname, 'src/67_editing_software.ico'),
-      show: true,
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.cjs'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: false,
-      },
-    });
-    if(open_shader_window_inspector){
-      shader_window.webContents.openDevTools();
-    }
-    
-    // --- Window A: Main App (Interactive, hidden from taskbar) ---
-    const appOpacity = BASE_WINDOW_TRANSPARENCY < lowest_possible_opacity ? lowest_possible_opacity : BASE_WINDOW_TRANSPARENCY;
-    app_window = new BrowserWindow({//BASE WINDOW
-      width: 1280,
-      height: 800,
-      frame: false,
-      skipTaskbar: true,
       opacity: appOpacity,
       webPreferences: {
         preload: path.join(__dirname, 'preload.cjs'),
@@ -62,6 +44,32 @@ app.whenReady().then(async () => {
     // Set a unique, known title immediately so desktopCapturer can match it later
     app_window.setTitle('67-editing-software-main');
 
+    // 2. Create Window B (Shader Overlay) SECOND, as a child of Window A
+    shader_window = new BrowserWindow({
+      width: 1280,
+      height: 800,
+      x: 0,
+      y: 0,
+      frame: false,
+      transparent: true,
+      backgroundColor: '#00000000',
+      hasShadow: false,
+      skipTaskbar: false,
+      icon: path.join(__dirname, 'src/67_editing_software.ico'),
+      show: true,
+      parent: app_window,      // 🔥 OFFICIAL DOC: Locks Z-order. Child always stays on top of parent.
+      focusable: false,        // 🔥 OFFICIAL DOC: Prevents overlay from stealing keyboard focus from the parent.
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.cjs'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
+    if(open_shader_window_inspector){
+      shader_window.webContents.openDevTools();
+    }
+
     console.log('Configure: app_window_clickthrough =', APP_WINDOW_CLICKTHROUGH);
     if (!APP_WINDOW_CLICKTHROUGH) {
       app_window.setIgnoreMouseEvents(false);
@@ -72,7 +80,6 @@ app.whenReady().then(async () => {
     }
 
     // shader_window is the visual overlay on top; it should be click-through by default
-    shader_window.setAlwaysOnTop(false, 'screen-saver');
     if(!SHADER_WINDOW_CLICKTHROUGH){
       shader_window.setIgnoreMouseEvents(false);
     } else {
@@ -96,7 +103,7 @@ app.whenReady().then(async () => {
       let isSyncing = false;
 
       const sync_windows = () => {
-        if (isSyncing || shader_window.isDestroyed()) return;
+        if (isSyncing || shader_window.isDestroyed() || app_window.isDestroyed()) return;
         isSyncing = true;
         const bounds = app_window.getBounds();
         shader_window.setBounds(bounds, false);
@@ -125,7 +132,6 @@ app.whenReady().then(async () => {
       // Initial sync after both windows are ready
       const initialSync = () => {
         if (shader_window && !shader_window.isDestroyed()) {
-          shader_window.setAlwaysOnTop(false, 'screen-saver');
           sync_windows();
         }
       };
@@ -136,7 +142,6 @@ app.whenReady().then(async () => {
     shader_window.loadURL('http://localhost:5173/shader_window.html');
 
     if (SYNC_WINDOWS) {
-      shader_window.setAlwaysOnTop(false, 'screen-saver');
       const bounds = app_window.getBounds();
       shader_window.setBounds(bounds);
     }
@@ -191,6 +196,7 @@ app.whenReady().then(async () => {
     });
     
   } else {
+    //fallback window: if shader_window is disabled
     app_window = new BrowserWindow({
       width: 1280,
       height: 800,
