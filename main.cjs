@@ -1,5 +1,6 @@
+//main.cjs
 const path = require('path');
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer } = require('electron');
 const config = require('./config.json');
 
 /*
@@ -24,10 +25,12 @@ const DOWNSCALE_FACTOR = config.DOWNSCALE_FACTOR;
 const SHADER_WINDOW = config.shader_window;
 const BASE_WINDOW_TRANSPARENCY = config.base_window_transparency;
 const SHADER_WINDOW_CLICKTHROUGH = config.shader_window_clickthrough;
+const APP_WINDOW_CLICKTHROUGH = config.app_window_clickthrough || false;
 const SYNC_WINDOWS = config.sync_windows;
 const ENSHITTIFY = config.enshittify;
 const SLIDESHOW = config.slideshow;
 const lowest_possible_opacity = 0.004;
+const open_shader_window_inspector = config.open_shader_window_inspector;
 
 //These two lines declare variables to hold references
 //to the application's two windows.
@@ -48,6 +51,7 @@ it's already resolved
 */
 
 app.whenReady().then(async () => {
+  console.log('main.cjs invoked');
   if (SHADER_WINDOW) {
     shader_window = new BrowserWindow({
       width: 1280,
@@ -68,7 +72,10 @@ app.whenReady().then(async () => {
         sandbox: false,
       },
     });
-
+    if(open_shader_window_inspector){
+      shader_window.webContents.openDevTools();
+    }
+    
     // --- Window A: Main App (Invisible but Interactive) ---
     const appOpacity = BASE_WINDOW_TRANSPARENCY < lowest_possible_opacity ? lowest_possible_opacity : BASE_WINDOW_TRANSPARENCY;
     app_window = new BrowserWindow({//BASE WINDOW
@@ -86,7 +93,12 @@ app.whenReady().then(async () => {
       },
     });
 
-    
+    console.log('Configure: app_window_clickthrough =', APP_WINDOW_CLICKTHROUGH);
+    if (APP_WINDOW_CLICKTHROUGH) {
+      app_window.setIgnoreMouseEvents(true, { forward: true });
+      console.log('✅ app_window: mouse events ignored (click-through enabled)');
+    }
+
     shader_window.setIgnoreMouseEvents(SHADER_WINDOW_CLICKTHROUGH, { forward: SHADER_WINDOW_CLICKTHROUGH });
 
     const ensureOverlayVisible = () => {
@@ -172,10 +184,8 @@ app.whenReady().then(async () => {
 
     shader_window.loadURL('http://localhost:5173/shader_window.html');
 
-    // IPC handlers for WebCodecs video pipeline - route structured payloads as-is
-    //the function that runs whenever something tries to get the window id for the application window.
-    // IPC handler to get the window source ID
-    // This is the ONLY thing main.cjs does for streaming now
+    // IPC handler to get the window source ID (base64 format)
+    // Used with getDisplayMedia for Option B
     ipcMain.handle('get-window-source-id', () => {
       if (app_window && app_window.webContents) {
         try {
@@ -200,6 +210,63 @@ app.whenReady().then(async () => {
       return null;
     });
     
+    // IPC handler to get the window source ID (window:PID:ID format)
+    // Used with getUserMedia for Option A
+    ipcMain.handle('get-window-source-desktop-id', async () => {
+      if (!app_window || app_window.isDestroyed()) {
+        console.error('🚨 Window not available for desktop ID');
+        return null;
+      }
+      
+      try {
+        const targetTitle = app_window.getTitle();
+        console.log('Searching for window with title:', targetTitle);
+        
+        const sources = await desktopCapturer.getSources({
+          types: ['window'],
+          thumbnailSize: { width: 0, height: 0 },
+        });
+        
+        // Find the window that matches our app_window by title
+        const windowSources = sources.filter(s => s.id.startsWith('window:'));
+        console.log('Available window sources:', windowSources.map(s => ({ id: s.id, name: s.name })));
+        
+        // Try to find by exact or partial title match
+        const matched = windowSources.find(s => {
+          if (!s.name) return false;
+          return s.name.includes(targetTitle);
+        });
+        
+        if (matched) {
+          console.log('✅ Found matching window by title:', matched.id, 'name:', matched.name);
+          return matched.id;
+        }
+        
+        // Fallback: use the first window source
+        if (windowSources.length > 0) {
+          console.log('⚠️ No exact match, using first window source:', windowSources[0].id);
+          return windowSources[0].id;
+        }
+        
+        console.error('🚨 No window sources found');
+        return null;
+      } catch (e) {
+        console.error('🚨 Failed to get desktop source ID:', e.message);
+        return null;
+      }
+    });
+    
+    // Runtime toggle for app_window click-through
+    // Toggles whether app_window ignores mouse events (passes clicks through to windows behind)
+    ipcMain.on('toggle-app-clickthrough', () => {
+      if (app_window && !app_window.isDestroyed()) {
+        const current = app_window.isIgnoringMouseEvents();
+        const next = !current;
+        app_window.setIgnoreMouseEvents(next, { forward: next });
+        console.log('Toggle: app_window_clickthrough =', next);
+      }
+    });
+
     // Send the source ID to shader_window as soon as it's ready
     // shader_window.tsx will handle getting the stream directly
     ipcMain.on('shader-window-ready', (event) => {

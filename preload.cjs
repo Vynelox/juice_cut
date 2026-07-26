@@ -1,3 +1,4 @@
+//preload.cjs
 const { contextBridge, ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -44,8 +45,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   on: (channel, callback) => {
     ipcRenderer.on(channel, (_event, ...args) => callback(...args));
   },
-  // Get the window source ID for getUserMedia
+  // Get the window source ID (base64 format) for getDisplayMedia
   getWindowSourceId: () => ipcRenderer.invoke('get-window-source-id'),
+  // Get the window source ID (window:PID:ID format) for getUserMedia
+  getWindowSourceDesktopId: () => ipcRenderer.invoke('get-window-source-desktop-id'),
+  // Toggle app_window click-through at runtime
+  toggleAppClickthrough: () => ipcRenderer.send('toggle-app-clickthrough'),
   // Notify main process that shader window is ready
   notifyShaderWindowReady: () => ipcRenderer.send('shader-window-ready'),
 });
