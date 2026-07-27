@@ -39,6 +39,12 @@
   --gui-scale: 1;
 }
 
+/* Global cursor hiding for custom_cursor mode */
+body.cursor-hidden,
+body.cursor-hidden * {
+  cursor: none !important;
+}
+
 body.graph-dragging,
 body.graph-dragging * {
   cursor: none !important;
@@ -116,16 +122,21 @@ html, body, #root {
   background: var(--bg-panel);
   border-bottom: var(--border-width) solid var(--border);
   flex-shrink: 0;
-  -webkit-app-region: drag;
+  /* 🔥 REMOVE -webkit-app-region: drag entirely */
+  /* cursor: none is now handled by body.cursor-hidden */
   -webkit-user-select: none;
+  position: relative;
   transition:
     background var(--theme-transition-duration) var(--theme-transition-timing),
     border-color var(--theme-transition-duration) var(--theme-transition-timing);
 }
 
 .app-header button,
-.app-header .status-dot {
+.app-header .status-dot,
+.app-header .app-logo {
   -webkit-app-region: no-drag;
+  position: relative;
+  z-index: 2;
 }
 
 .app-logo {
@@ -1624,4 +1635,3 @@ input[type="color"] {
   gap: 12px;
   padding: 0 0 12px 0;
 }
-

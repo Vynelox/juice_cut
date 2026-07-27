@@ -109,7 +109,7 @@ app.whenReady().then(async () => {
         shader_window.setBounds(bounds, false);
         isSyncing = false;
       };
-
+      
       app_window.on('move', sync_windows);
       app_window.on('resize', sync_windows);
 
@@ -223,6 +223,33 @@ app.whenReady().then(async () => {
       console.log('🔧 Main window loaded (no shader overlay)');
     });
   }
+
+  // 🔥 MANUAL WINDOW DRAGGING (Bypasses OS cursor override bug)
+  let isDragging = false;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+
+  ipcMain.on('start-drag', (event, coords) => {
+    isDragging = true;
+    const bounds = app_window.getBounds();
+    dragOffsetX = coords.x - bounds.x;
+    dragOffsetY = coords.y - bounds.y;
+  });
+
+  ipcMain.on('dragging', (event, coords) => {
+    if (isDragging && app_window && !app_window.isDestroyed()) {
+      app_window.setBounds({
+        x: Math.round(coords.x - dragOffsetX),
+        y: Math.round(coords.y - dragOffsetY),
+        width: app_window.getBounds().width,
+        height: app_window.getBounds().height,
+      });
+    }
+  });
+
+  ipcMain.on('stop-drag', () => {
+    isDragging = false;
+  });
 
   ipcMain.on('window-minimize', () => app_window.minimize());
   ipcMain.on('window-maximize', () => {

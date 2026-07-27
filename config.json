@@ -10,5 +10,6 @@
     "sync_windows": true,
     "electron_window_border_radius": 8,
     "IPC_compression_quality": 90,
-    "capture_method": "mediaSourceId"
+    "capture_method": "mediaSourceId",
+    "custom_cursor": false
 }

@@ -72,6 +72,17 @@ function createProgram(gl: WebGL2RenderingContext, vsSource: string, fsSource: s
 
 async function main() {
   console.log('running async function main()');
+  
+  try {
+    const cfg = await fetch('/config.json').then(r => r.json());
+    if (cfg?.custom_cursor) {
+      document.body.style.cursor = 'none';
+      document.documentElement.style.cursor = 'none';
+      console.log('Overlay: System cursor hidden via custom_cursor config');
+    }
+  } catch (e) {
+    console.warn('Overlay: Failed to fetch config for custom_cursor');
+  }
 
   let stream: MediaStream | null = null;
   let videoTrack: MediaStreamTrack | null = null;
@@ -188,7 +199,9 @@ async function main() {
     try {
       // This triggers setDisplayMediaRequestHandler in main.cjs
       stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
+        video: {
+          cursor: 'never'
+        },
         audio: false,
       });
       console.log('✅ SUCCESS: MediaStream acquired, track count:', stream.getVideoTracks().length);

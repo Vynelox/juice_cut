@@ -95,6 +95,7 @@ function AppContent() {
   const [rollClipId, setRollClipId] = useState<string | null>(null);
   const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [hasModalOpen, setHasModalOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   // settings (persisted)
   const [playheadTop, setPlayheadTop] = useState<number>(() => {
@@ -606,7 +607,38 @@ function AppContent() {
   const rollClip = rollClipId ? clips.find(c => c.id === rollClipId) ?? null : null;
   const rollMedia = rollClip ? mediaItems.get(rollClip.mediaId) ?? null : null;
 
-
+  // Toggle cursor visibility based on config.custom_cursor
+  useEffect(() => {
+    let injectedStyleTag: HTMLStyleElement | null = null;
+    fetch('/config.json')
+      .then(r => r.json())
+      .then(cfg => {
+        if (cfg?.custom_cursor) {
+          // ENABLE CUSTOM CURSOR MODE
+          document.body.classList.add('cursor-hidden');
+          // Inject the nuclear option just in case
+          injectedStyleTag = document.createElement('style');
+          injectedStyleTag.innerHTML = '* { cursor: none !important; }';
+          document.head.appendChild(injectedStyleTag);
+        } else {
+          // DISABLE CUSTOM CURSOR MODE (Revert to normal)
+          document.body.classList.remove('cursor-hidden');
+          document.documentElement.style.cursor = '';
+          document.body.style.cursor = '';
+          // Remove injected style if it exists
+          if (injectedStyleTag && injectedStyleTag.parentNode) {
+            injectedStyleTag.parentNode.removeChild(injectedStyleTag);
+          }
+        }
+      })
+      .catch(() => {});
+    // Cleanup on unmount
+    return () => {
+      if (injectedStyleTag && injectedStyleTag.parentNode) {
+        injectedStyleTag.parentNode.removeChild(injectedStyleTag);
+      }
+    };
+  }, []);
 
   //add cursor: 'none' in the style=({}) section in the
   //<div id="editor-container"> 
@@ -633,7 +665,29 @@ function AppContent() {
           <audio key={item.id} id={`aud-${item.id}`} src={item.src} style={{ display: 'none' }} preload="auto" />
         ) : null
       )}
-      <header className="app-header">
+      <header className="app-header"
+        onMouseDown={(e) => {
+          setIsDragging(true);
+          const api = (window as any).electronAPI;
+          if (api) api.send('start-drag', { x: e.screenX, y: e.screenY });
+        }}
+        onMouseMove={(e) => {
+          if (isDragging) {
+            const api = (window as any).electronAPI;
+            if (api) api.send('dragging', { x: e.screenX, y: e.screenY });
+          }
+        }}
+        onMouseUp={() => {
+          setIsDragging(false);
+          const api = (window as any).electronAPI;
+          if (api) api.send('stop-drag');
+        }}
+        onMouseLeave={() => {
+          setIsDragging(false);
+          const api = (window as any).electronAPI;
+          if (api) api.send('stop-drag');
+        }}
+      >
         <div className="app-logo">
           <img src="/src/67_editing_software.ico" alt="67 editing software" style={{ width: 22, height: 22 }} />
           <span>67 editing software</span>
