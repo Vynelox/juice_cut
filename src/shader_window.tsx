@@ -9,6 +9,11 @@
  * session.defaultSession.setDisplayMediaRequestHandler to provide the exact window.
  * 
  * NO CONFIG NEEDED: The main process handles window selection automatically.
+ * 
+ * SHADER SYSTEM: Imports a ShaderRenderer from the shader folder
+ * (e.g. ./shaders/default_shader). The renderer handles all GPU resources:
+ * compilation, geometry, textures, uniforms, and per-frame rendering.
+ * To use a different shader, change the import path below.
  */
 
 console.log('PARSE: shader_window.tsx loaded');
@@ -22,53 +27,11 @@ declare class MediaStreamTrackProcessor {
 
 console.log('PARSE: MediaStreamTrackProcessor declaration complete');
 
-import VERTEX_SOURCE from './shaders/main.vert?raw';
-console.log('PARSE: VERTEX_SOURCE imported');
-
-import FRAGMENT_SOURCE from './shaders/main.frag?raw';
-console.log('PARSE: FRAGMENT_SOURCE imported');
-
-// Fullscreen quad vertices (position + texCoord) using TRIANGLE_STRIP
-const QUAD_VERTICES = new Float32Array([
-  -1.0,  1.0,    0.0, 0.0,  // top-left
-  -1.0, -1.0,    0.0, 1.0,  // bottom-left
-   1.0,  1.0,    1.0, 0.0,  // top-right
-   1.0, -1.0,    1.0, 1.0,  // bottom-right
-]);
-
-function compileShader(gl: WebGL2RenderingContext, source: string, type: number): WebGLShader | null {
-  console.log('CALL: compileShader');
-  const shader = gl.createShader(type);
-  if (!shader) return null;
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    console.error('Overlay shader compile error:', gl.getShaderInfoLog(shader));
-    gl.deleteShader(shader);
-    return null;
-  }
-  console.log('CALL: compileShader complete');
-  return shader;
-}
-
-function createProgram(gl: WebGL2RenderingContext, vsSource: string, fsSource: string): WebGLProgram | null {
-  console.log('CALL: createProgram');
-  const vs = compileShader(gl, vsSource, gl.VERTEX_SHADER);
-  const fs = compileShader(gl, fsSource, gl.FRAGMENT_SHADER);
-  if (!vs || !fs) return null;
-
-  const prog = gl.createProgram();
-  if (!prog) return null;
-  gl.attachShader(prog, vs);
-  gl.attachShader(prog, fs);
-  gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    console.error('Overlay program link error:', gl.getProgramInfoLog(prog));
-    return null;
-  }
-  console.log('CALL: createProgram complete');
-  return prog;
-}
+// ─── Import the shader module ───────────────────────────────────────────────
+// Change this import to use a different shader set.
+// Each shader folder exports { createShaderRenderer, ShaderRenderer }.
+import { createShaderRenderer } from './shaders/default_shader/index';
+console.log('PARSE: ShaderRenderer imported');
 
 async function main() {
   console.log('running async function main()');
@@ -126,18 +89,15 @@ async function main() {
 
     console.log('Overlay: WebGL2 context created successfully');
 
-    // Create shader program
-    const program = createProgram(gl, VERTEX_SOURCE, FRAGMENT_SOURCE);
-    console.log('CHECKPOINT: createProgram() =', program ? 'success' : 'null');
-    if (!program) {
-      console.error('Overlay: Failed to create shader program');
+    // ─── Create the shader renderer ──────────────────────────────────────────
+    const renderer = createShaderRenderer();
+    const initialized = renderer.init(gl!);
+    console.log('CHECKPOINT: ShaderRenderer.init() =', initialized ? 'success' : 'failed');
+    if (!initialized) {
+      console.error('Overlay: Failed to initialize shader renderer');
       return;
     }
-    const uTextureLoc = gl!.getUniformLocation(program, 'u_texture');
-    const uResolutionLoc = gl!.getUniformLocation(program, 'u_resolution');
-    const uTimeLoc = gl!.getUniformLocation(program, 'u_time');
-    const uStrengthLoc = gl!.getUniformLocation(program, 'u_strength');
-    console.log('Overlay: Shader program created successfully');
+    console.log('Overlay: Shader renderer initialized successfully');
 
     // Set canvas pixel size to window size
     function resizeCanvas() {
@@ -146,41 +106,11 @@ async function main() {
       const h = window.innerHeight;
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
-      gl!.viewport(0, 0, canvas.width, canvas.height);
-      gl!.useProgram(program);
-      gl!.uniform2f(uResolutionLoc, canvas.width, canvas.height);
+      renderer.resize(gl!, canvas.width, canvas.height);
     }
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
     console.log('CHECKPOINT: resizeCanvas configured');
-
-    // Create VAO and VBO
-    const vao = gl!.createVertexArray();
-    gl!.bindVertexArray(vao);
-
-    const vbo = gl!.createBuffer();
-    gl!.bindBuffer(gl!.ARRAY_BUFFER, vbo);
-    gl!.bufferData(gl!.ARRAY_BUFFER, QUAD_VERTICES, gl!.STATIC_DRAW);
-
-    const posLoc = gl!.getAttribLocation(program, 'a_position');
-    gl!.enableVertexAttribArray(posLoc);
-    gl!.vertexAttribPointer(posLoc, 2, gl!.FLOAT, false, 16, 0);
-
-    const texLoc = gl!.getAttribLocation(program, 'a_texCoord');
-    gl!.enableVertexAttribArray(texLoc);
-    gl!.vertexAttribPointer(texLoc, 2, gl!.FLOAT, false, 16, 8);
-
-    // Create texture for incoming frames
-    const texture = gl!.createTexture();
-    gl!.bindTexture(gl!.TEXTURE_2D, texture);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MIN_FILTER, gl!.NEAREST);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MAG_FILTER, gl!.NEAREST);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_S, gl!.CLAMP_TO_EDGE);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_T, gl!.CLAMP_TO_EDGE);
-    console.log('CHECKPOINT: VAO, VBO, texture created');
-
-    let textureWidth = 1;
-    let textureHeight = 1;
 
     // Notify main process we're ready
     const api = (window as any).electronAPI;
@@ -199,9 +129,9 @@ async function main() {
     try {
       // This triggers setDisplayMediaRequestHandler in main.cjs
       stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          cursor: 'never'
-        },
+        // 'as any' bypasses the TypeScript error.
+        // This tells the capture engine to EXCLUDE the cursor from the video stream.
+        video: { cursor: 'never' } as any,
         audio: false,
       });
       console.log('✅ SUCCESS: MediaStream acquired, track count:', stream.getVideoTracks().length);
@@ -222,7 +152,7 @@ async function main() {
       return;
     }
 
-    // Step 3: Process VideoFrames and upload to WebGL
+    // Step 3: Process VideoFrames and render through the shader
     async function readLoop() {
       while (!stopped) {
         try {
@@ -231,34 +161,9 @@ async function main() {
 
           const frame = value as VideoFrame;
 
-          // Re-allocate texture if size changed
-          if (frame.displayWidth !== textureWidth || frame.displayHeight !== textureHeight) {
-            textureWidth = frame.displayWidth;
-            textureHeight = frame.displayHeight;
-            gl!.bindTexture(gl!.TEXTURE_2D, texture);
-            gl!.pixelStorei(gl!.UNPACK_ALIGNMENT, 1);
-            gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, textureWidth, textureHeight, 0, gl!.RGBA, gl!.UNSIGNED_BYTE, null);
-            console.log('Overlay: Texture resized to', textureWidth, 'x', textureHeight);
-          }
-
-          // Upload VideoFrame directly to WebGL texture (GPU-to-GPU, zero-copy)
-          gl!.bindTexture(gl!.TEXTURE_2D, texture);
-          gl!.pixelStorei(gl!.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-          gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, gl!.RGBA, gl!.UNSIGNED_BYTE, frame);
-
-          // Clear and render
-          gl!.clearColor(0, 0, 0, 0);
-          gl!.clear(gl!.COLOR_BUFFER_BIT);
-          gl!.useProgram(program);
-          gl!.activeTexture(gl!.TEXTURE0);
-          gl!.bindTexture(gl!.TEXTURE_2D, texture);
-          gl!.uniform1i(uTextureLoc, 0);
-          gl!.uniform1f(uStrengthLoc, 1.0);
-          gl!.bindVertexArray(vao);
-          gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4);
-
+          // Render the frame through the shader
           const time = performance.now() / 1000.0;
-          gl!.uniform1f(uTimeLoc, time);
+          renderer.renderFrame(gl!, frame, time, 1.0);
 
           // Close the frame to release GPU memory
           frame.close();
@@ -280,10 +185,7 @@ async function main() {
       reader?.cancel();
       videoTrack?.stop();
       stream?.getTracks().forEach(t => t.stop());
-      if (vao) gl!.deleteVertexArray(vao);
-      if (vbo) gl!.deleteBuffer(vbo);
-      if (texture) gl!.deleteTexture(texture);
-      if (program) gl!.deleteProgram(program);
+      renderer.destroy(gl!);
     });
     console.log('CHECKPOINT: beforeunload listener registered');
 

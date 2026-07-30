@@ -1,53 +1,79 @@
-//main.cjs
+// main.cjs
 const path = require('path');
 const { app, BrowserWindow, ipcMain, desktopCapturer, session } = require('electron');
 const config = require('./config.json');
 
-const DOWNSCALE_FACTOR = config.DOWNSCALE_FACTOR;
-const SHADER_WINDOW = config.shader_window;
-const BASE_WINDOW_TRANSPARENCY = config.base_window_transparency;
-const SHADER_WINDOW_CLICKTHROUGH = config.shader_window_clickthrough;
-const APP_WINDOW_CLICKTHROUGH = config.app_window_clickthrough || false;
-const SYNC_WINDOWS = config.sync_windows;
-const ENSHITTIFY = config.enshittify;
-const SLIDESHOW = config.slideshow;
-const lowest_possible_opacity = 0.004;
-const open_shader_window_inspector = config.open_shader_window_inspector;
+// ─── Constants ───────────────────────────────────────────────────────────────
+const LOWEST_POSSIBLE_OPACITY = 0.004;
+const APP_TITLE = '67-editing-software-main';
+const WINDOW_DEFAULTS = { width: 1280, height: 800 };
+const WIN_PRELOAD = path.join(__dirname, 'preload.cjs');
+const WIN_ICON = path.join(__dirname, 'src/67_editing_software.ico');
 
-let app_window = null;
-let shader_window = null;
+// ─── Config validation with defaults ─────────────────────────────────────────
+function loadConfig() {
+  return {
+    downscaleFactor: config.DOWNSCALE_FACTOR ?? 1,
+    shaderWindow: config.shader_window ?? false,
+    baseWindowTransparency: config.base_window_transparency ?? 1,
+    shaderWindowClickthrough: config.shader_window_clickthrough ?? true,
+    appWindowClickthrough: config.app_window_clickthrough ?? false,
+    syncWindows: config.sync_windows ?? false,
+    enshittify: config.enshittify ?? false,
+    slideshow: config.slideshow ?? false,
+    openShaderWindowInspector: config.open_shader_window_inspector ?? false,
+  };
+}
 
-app.whenReady().then(async () => {
-  console.log('main.cjs invoked');
-  if (SHADER_WINDOW) {
-    // 1. Create Window A (Main App) FIRST, so it can be the parent
-    //NOTE: setting skipTaskbar: false DOES NOT WORK for child windows
-    //if its parent window has skipTaskbar: true. so enable skipTaskbar
-    //for both shader and app window depending on which one you want
-    //to make as the parent
-    const appOpacity = BASE_WINDOW_TRANSPARENCY < lowest_possible_opacity ? lowest_possible_opacity : BASE_WINDOW_TRANSPARENCY;
-    app_window = new BrowserWindow({
-      width: 1280,
-      height: 800,
+// ─── Shared webPreferences for all windows ───────────────────────────────────
+const WEB_PREFERENCES = {
+  preload: WIN_PRELOAD,
+  contextIsolation: true,
+  nodeIntegration: false,
+  sandbox: false,
+};
+
+// ─── Window Manager ──────────────────────────────────────────────────────────
+class WindowManager {
+  constructor() {
+    this.cfg = loadConfig();
+    this.appWindow = null;
+    this.shaderWindow = null;
+    this.isDragging = false;
+    this.dragOffsetX = 0;
+    this.dragOffsetY = 0;
+    this.isSyncing = false;
+    this.ready = false;
+  }
+
+  // ── Window Creation ──────────────────────────────────────────────────────
+
+  createAppWindow() {
+    const opacity = Math.max(
+      this.cfg.baseWindowTransparency,
+      LOWEST_POSSIBLE_OPACITY
+    );
+
+    this.appWindow = new BrowserWindow({
+      ...WINDOW_DEFAULTS,
       frame: false,
       skipTaskbar: false,
-      icon: path.join(__dirname, 'src/67_editing_software.ico'),
-      opacity: appOpacity,
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.cjs'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: false,
-      },
+      icon: WIN_ICON,
+      opacity,
+      webPreferences: WEB_PREFERENCES,
     });
 
-    // Set a unique, known title immediately so desktopCapturer can match it later
-    app_window.setTitle('67-editing-software-main');
+    this.appWindow.setTitle(APP_TITLE);
+    this.appWindow.loadURL('http://localhost:5173');
+    console.log('✅ app_window created');
+    return this.appWindow;
+  }
 
-    // 2. Create Window B (Shader Overlay) SECOND, as a child of Window A
-    shader_window = new BrowserWindow({
-      width: 1280,
-      height: 800,
+  createShaderWindow() {
+    if (!this.cfg.shaderWindow || !this.appWindow) return null;
+
+    this.shaderWindow = new BrowserWindow({
+      ...WINDOW_DEFAULTS,
       x: 0,
       y: 0,
       frame: false,
@@ -55,218 +81,300 @@ app.whenReady().then(async () => {
       backgroundColor: '#00000000',
       hasShadow: false,
       skipTaskbar: false,
-      icon: path.join(__dirname, 'src/67_editing_software.ico'),
+      icon: WIN_ICON,
       show: true,
-      parent: app_window,      // 🔥 OFFICIAL DOC: Locks Z-order. Child always stays on top of parent.
-      focusable: false,        // 🔥 OFFICIAL DOC: Prevents overlay from stealing keyboard focus from the parent.
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.cjs'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: false,
-      },
+      parent: this.appWindow,   // Locks Z-order: child always on top of parent
+      focusable: false,          // Prevents overlay from stealing keyboard focus
+      webPreferences: WEB_PREFERENCES,
     });
-    if(open_shader_window_inspector){
-      shader_window.webContents.openDevTools();
+
+    if (this.cfg.openShaderWindowInspector) {
+      this.shaderWindow.webContents.openDevTools();
     }
 
-    console.log('Configure: app_window_clickthrough =', APP_WINDOW_CLICKTHROUGH);
-    if (!APP_WINDOW_CLICKTHROUGH) {
-      app_window.setIgnoreMouseEvents(false);
-      console.log('✅ app_window: mouse events enabled (interactive)');
+    this.shaderWindow.loadURL('http://localhost:5173/shader_window.html');
+    console.log('✅ shader_window created');
+    return this.shaderWindow;
+  }
+
+  createFallbackWindow() {
+    this.appWindow = new BrowserWindow({
+      ...WINDOW_DEFAULTS,
+      frame: false,
+      skipTaskbar: false,
+      opacity: 1,
+      icon: WIN_ICON,
+      webPreferences: WEB_PREFERENCES,
+    });
+
+    this.appWindow.loadURL('http://localhost:5173');
+    console.log('✅ fallback app_window created');
+    return this.appWindow;
+  }
+
+  // ── Click-Through Configuration ──────────────────────────────────────────
+
+  setupClickThrough() {
+    // App window
+    if (this.cfg.appWindowClickthrough) {
+      this.appWindow.setIgnoreMouseEvents(true, { forward: true });
+      console.log('⚠️ app_window: click-through enabled');
     } else {
-      app_window.setIgnoreMouseEvents(true, { forward: true });
-      console.log('⚠️ app_window: mouse events ignored (click-through enabled)');
+      this.appWindow.setIgnoreMouseEvents(false);
+      console.log('✅ app_window: mouse events enabled');
     }
 
-    // shader_window is the visual overlay on top; it should be click-through by default
-    if(!SHADER_WINDOW_CLICKTHROUGH){
-      shader_window.setIgnoreMouseEvents(false);
-    } else {
-      shader_window.setIgnoreMouseEvents(true, { forward: true });
+    // Shader window (overlay) — should be click-through by default
+    if (this.shaderWindow) {
+      if (this.cfg.shaderWindowClickthrough) {
+        this.shaderWindow.setIgnoreMouseEvents(true, { forward: true });
+        console.log('⚠️ shader_window: click-through enabled');
+      } else {
+        this.shaderWindow.setIgnoreMouseEvents(false);
+        console.log('✅ shader_window: mouse events enabled');
+      }
     }
-    
+  }
 
-    const ensureOverlayVisible = () => {
-      if (!shader_window.isDestroyed() && !shader_window.isVisible()) {
-        shader_window.showInactive();
-        shader_window.setVisibleOnAllWorkspaces(true);
+  // ── Overlay Visibility ───────────────────────────────────────────────────
+
+  setupOverlayVisibility() {
+    if (!this.shaderWindow) return;
+
+    const ensureVisible = () => {
+      if (!this.shaderWindow.isDestroyed() && !this.shaderWindow.isVisible()) {
+        this.shaderWindow.showInactive();
+        this.shaderWindow.setVisibleOnAllWorkspaces(true);
       }
     };
 
-    app_window.on('focus', ensureOverlayVisible);
-    app_window.on('show', ensureOverlayVisible);
-    app_window.on('restore', ensureOverlayVisible);
-    app_window.on('activate', ensureOverlayVisible);
+    this.appWindow.on('focus', ensureVisible);
+    this.appWindow.on('show', ensureVisible);
+    this.appWindow.on('restore', ensureVisible);
+    this.appWindow.on('activate', ensureVisible);
+    console.log('✅ overlay visibility handlers registered');
+  }
 
-    if (SYNC_WINDOWS) {
-      let isSyncing = false;
+  // ── Window Synchronization ───────────────────────────────────────────────
 
-      const sync_windows = () => {
-        if (isSyncing || shader_window.isDestroyed() || app_window.isDestroyed()) return;
-        isSyncing = true;
-        const bounds = app_window.getBounds();
-        shader_window.setBounds(bounds, false);
-        isSyncing = false;
-      };
-      
-      app_window.on('move', sync_windows);
-      app_window.on('resize', sync_windows);
+  setupWindowSync() {
+    if (!this.cfg.syncWindows || !this.shaderWindow) return;
 
-      app_window.on('maximize', () => {
-        if (!shader_window.isDestroyed()) shader_window.maximize();
-      });
-      app_window.on('unmaximize', () => {
-        if (!shader_window.isDestroyed()) shader_window.unmaximize();
-      });
-      app_window.on('minimize', () => {
-        if (!shader_window.isDestroyed()) shader_window.minimize();
-      });
-      app_window.on('restore', () => {
-        if (!shader_window.isDestroyed()) {
-          shader_window.restore();
-          shader_window.showInactive();
-        }
-      });
+    const syncBounds = () => {
+      if (this.isSyncing) return;
+      if (this.shaderWindow.isDestroyed() || this.appWindow.isDestroyed()) return;
+      this.isSyncing = true;
+      this.shaderWindow.setBounds(this.appWindow.getBounds(), false);
+      this.isSyncing = false;
+    };
 
-      // Initial sync after both windows are ready
-      const initialSync = () => {
-        if (shader_window && !shader_window.isDestroyed()) {
-          sync_windows();
-        }
-      };
-      
-      setTimeout(initialSync, 100);
-    }
+    this.appWindow.on('move', syncBounds);
+    this.appWindow.on('resize', syncBounds);
 
-    shader_window.loadURL('http://localhost:5173/shader_window.html');
+    this.appWindow.on('maximize', () => {
+      if (!this.shaderWindow.isDestroyed()) this.shaderWindow.maximize();
+    });
+    this.appWindow.on('unmaximize', () => {
+      if (!this.shaderWindow.isDestroyed()) this.shaderWindow.unmaximize();
+    });
+    this.appWindow.on('minimize', () => {
+      if (!this.shaderWindow.isDestroyed()) this.shaderWindow.minimize();
+    });
+    this.appWindow.on('restore', () => {
+      if (!this.shaderWindow.isDestroyed()) {
+        this.shaderWindow.restore();
+        this.shaderWindow.showInactive();
+      }
+    });
 
-    if (SYNC_WINDOWS) {
-      const bounds = app_window.getBounds();
-      shader_window.setBounds(bounds);
-    }
+    // Initial sync after a short delay to let both windows settle
+    setTimeout(() => {
+      if (this.shaderWindow && !this.shaderWindow.isDestroyed()) {
+        this.shaderWindow.setBounds(this.appWindow.getBounds());
+      }
+    }, 100);
 
-    // 🔥 OFFICIAL ELECTRON API: Intercept display media requests and provide the exact window
-    session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-      desktopCapturer.getSources({ types: ['window'] }).then((sources) => {
-        // DEBUG: Log all available windows to see exactly what Windows is naming them
-        console.log('🔍 DEBUG: Available windows:', sources.map(s => ({ id: s.id, name: s.name })));
+    console.log('✅ window sync handlers registered');
+  }
 
-        // Try to find our window, but fallback to the first available window if not found.
-        // This prevents the app from crashing and helps us verify the pipeline works.
-        const targetWindow = sources.find(s => s.name && s.name.includes('67-editing-software')) || sources[0];
-        if (targetWindow) {
-          console.log('✅ Main Process: Intercepted capture request, providing window:', targetWindow.id, '| Name:', targetWindow.name);
-          callback({ video: targetWindow });
-        } else {
-          console.error('❌ Main Process: No windows found at all.');
-          // Deny the request gracefully without crashing Electron
-          callback({ });
-        }
-      }).catch(err => {
-        console.error('❌ Main Process: desktopCapturer failed:', err);
-        // Deny the request gracefully without crashing Electron
-        callback({});
-      });
+  // ── Display Media Handler ────────────────────────────────────────────────
+
+  setupDisplayMediaHandler() {
+    session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+      desktopCapturer
+        .getSources({ types: ['window'] })
+        .then((sources) => {
+          console.log('🔍 Available windows:', sources.map(s => ({ id: s.id, name: s.name })));
+
+          const target = sources.find(s => s.name && s.name.includes(APP_TITLE)) || sources[0];
+          if (target) {
+            console.log('✅ Providing window for capture:', target.id, '| Name:', target.name);
+            callback({ video: target });
+          } else {
+            console.error('❌ No windows found for capture');
+            callback({});
+          }
+        })
+        .catch((err) => {
+          console.error('❌ desktopCapturer failed:', err);
+          callback({});
+        });
+    });
+    console.log('✅ display media handler registered');
+  }
+
+  // ── Manual Window Dragging ───────────────────────────────────────────────
+
+  setupDragHandling() {
+    ipcMain.on('start-drag', (_event, coords) => {
+      this.isDragging = true;
+      const bounds = this.appWindow.getBounds();
+      this.dragOffsetX = coords.x - bounds.x;
+      this.dragOffsetY = coords.y - bounds.y;
+    });
+
+    ipcMain.on('dragging', (_event, coords) => {
+      if (this.isDragging && this.appWindow && !this.appWindow.isDestroyed()) {
+        this.appWindow.setPosition(
+          Math.round(coords.x - this.dragOffsetX),
+          Math.round(coords.y - this.dragOffsetY)
+        );
+      }
+    });
+
+    ipcMain.on('stop-drag', () => {
+      this.isDragging = false;
+    });
+    console.log('✅ drag handling registered');
+  }
+
+  // ── IPC Handlers ─────────────────────────────────────────────────────────
+
+  setupIPCHandlers() {
+    // Window controls
+    ipcMain.on('window-minimize', () => this.appWindow.minimize());
+    ipcMain.on('window-maximize', () => {
+      if (this.appWindow.isMaximized()) {
+        this.appWindow.unmaximize();
+      } else {
+        this.appWindow.maximize();
+      }
+    });
+    ipcMain.on('window-close', () => {
+      if (this.shaderWindow && !this.shaderWindow.isDestroyed()) {
+        this.shaderWindow.close();
+      }
+      this.appWindow.close();
     });
 
     // Runtime toggle for app_window click-through
-    // Toggles whether app_window ignores mouse events (passes clicks through to windows behind)
     ipcMain.on('toggle-app-clickthrough', () => {
-      if (app_window && !app_window.isDestroyed()) {
-        const current = app_window.isIgnoringMouseEvents();
+      if (this.appWindow && !this.appWindow.isDestroyed()) {
+        const current = this.appWindow.isIgnoringMouseEvents();
         const next = !current;
-        app_window.setIgnoreMouseEvents(next, { forward: next });
+        this.appWindow.setIgnoreMouseEvents(next, { forward: next });
         console.log('Toggle: app_window_clickthrough =', next);
       }
     });
 
-    // Send the source ID to shader_window as soon as it's ready
-    // shader_window.tsx will handle getting the stream directly
+    // Shader window ready notification
     ipcMain.on('shader-window-ready', (event) => {
-      if (app_window && app_window.webContents) {
+      if (this.appWindow && this.appWindow.webContents) {
         try {
-          const id = app_window.webContents.getMediaSourceId(app_window.webContents);
+          const id = this.appWindow.webContents.getMediaSourceId(this.appWindow.webContents);
           console.log('📤 Sending window source ID to shader_window:', id);
           event.sender.send('window-source-id', id);
         } catch (e) {
-          console.error('🚨 Failed to get source ID for shader_window:', e.message);
+          console.error('🚨 Failed to get source ID:', e.message);
         }
       }
     });
-    
-  } else {
-    //fallback window: if shader_window is disabled
-    app_window = new BrowserWindow({
-      width: 1280,
-      height: 800,
-      frame: false,
-      skipTaskbar: false,
-      opacity: 1,
-      icon: path.join(__dirname, 'src/67_editing_software.ico'),
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.cjs'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: false,
-      },
-    });
 
+    // Fallback: get-window-source-id for non-shader mode
     ipcMain.handle('get-window-source-id', () => {
-      if (app_window && app_window.webContents) {
-        return app_window.webContents.getMediaSourceId(app_window.webContents);
+      if (this.appWindow && this.appWindow.webContents) {
+        return this.appWindow.webContents.getMediaSourceId(this.appWindow.webContents);
       }
       return null;
     });
 
-    app_window.webContents.on('did-finish-load', () => {
-      console.log('🔧 Main window loaded (no shader overlay)');
+    // Placeholder handler for get-window-source-desktop-id (used by preload)
+    ipcMain.handle('get-window-source-desktop-id', () => {
+      // This is a stub — implement if needed for getUserMedia capture
+      return null;
+    });
+
+    console.log('✅ IPC handlers registered');
+  }
+
+  // ── Window Lifecycle Cleanup ─────────────────────────────────────────────
+
+  setupLifecycleHandlers() {
+    this.shaderWindow?.on('closed', () => {
+      this.shaderWindow = null;
+    });
+    this.appWindow?.on('closed', () => {
+      this.appWindow = null;
     });
   }
 
-  // 🔥 MANUAL WINDOW DRAGGING (Bypasses OS cursor override bug)
-  let isDragging = false;
-  let dragOffsetX = 0;
-  let dragOffsetY = 0;
+  // ── Initialization ───────────────────────────────────────────────────────
 
-  ipcMain.on('start-drag', (event, coords) => {
-    isDragging = true;
-    const bounds = app_window.getBounds();
-    dragOffsetX = coords.x - bounds.x;
-    dragOffsetY = coords.y - bounds.y;
-  });
+  async init() {
+    console.log('main.cjs — WindowManager initializing');
 
-  ipcMain.on('dragging', (event, coords) => {
-    if (isDragging && app_window && !app_window.isDestroyed()) {
-      app_window.setBounds({
-        x: Math.round(coords.x - dragOffsetX),
-        y: Math.round(coords.y - dragOffsetY),
-        width: app_window.getBounds().width,
-        height: app_window.getBounds().height,
+    if (this.cfg.shaderWindow) {
+      // 1. Create app window first (parent)
+      this.createAppWindow();
+
+      // 2. Create shader window second (child)
+      this.createShaderWindow();
+
+      // 3. Configure click-through behavior
+      this.setupClickThrough();
+
+      // 4. Ensure overlay stays visible
+      this.setupOverlayVisibility();
+
+      // 5. Sync window positions if enabled
+      this.setupWindowSync();
+
+      // 6. Intercept display media requests
+      this.setupDisplayMediaHandler();
+    } else {
+      // Fallback: single window, no shader overlay
+      this.createFallbackWindow();
+
+      // Register the IPC handler for fallback mode
+      ipcMain.handle('get-window-source-id', () => {
+        if (this.appWindow && this.appWindow.webContents) {
+          return this.appWindow.webContents.getMediaSourceId(this.appWindow.webContents);
+        }
+        return null;
+      });
+
+      this.appWindow.webContents.on('did-finish-load', () => {
+        console.log('🔧 Main window loaded (no shader overlay)');
       });
     }
-  });
 
-  ipcMain.on('stop-drag', () => {
-    isDragging = false;
-  });
+    // 7. Manual window dragging (bypasses OS cursor override bug)
+    this.setupDragHandling();
 
-  ipcMain.on('window-minimize', () => app_window.minimize());
-  ipcMain.on('window-maximize', () => {
-    if (app_window.isMaximized()) app_window.unmaximize();
-    else app_window.maximize();
-  });
-  ipcMain.on('window-close', () => {
-    if (shader_window && !shader_window.isDestroyed()) shader_window.close();
-    app_window.close();
-  });
+    // 8. IPC handlers (window controls, etc.)
+    this.setupIPCHandlers();
 
-  app_window.loadURL('http://localhost:5173');
+    // 9. Window lifecycle cleanup
+    this.setupLifecycleHandlers();
 
-  shader_window.on('closed', () => {
-    shader_window = null;
-  });
-  app_window.on('closed', () => {
-    app_window = null;
-  });
+    this.ready = true;
+    console.log('✅ WindowManager initialized successfully');
+  }
+}
+
+// ─── Application Entry Point ─────────────────────────────────────────────────
+app.whenReady().then(async () => {
+  console.log('main.cjs invoked');
+  const manager = new WindowManager();
+  await manager.init();
 });
