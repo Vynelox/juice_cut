@@ -61,6 +61,7 @@
 
 import VERTEX_SOURCE from './main.vert?raw';
 import FRAGMENT_SOURCE from './main.frag?raw';
+import CURSOR_VERT_SOURCE from './cursor.vert?raw';
 import CURSOR_FRAG_SOURCE from './cursor.frag?raw';
 
 // ─── Fullscreen quad geometry ───────────────────────────────────────────────
@@ -71,6 +72,12 @@ const QUAD_VERTICES = new Float32Array([
    1.0,  1.0,    1.0, 0.0,  // top-right
    1.0, -1.0,    1.0, 1.0,  // bottom-right
 ]);
+
+// ─── Cursor shape is defined entirely in cursor.vert via gl_VertexID ────────
+// No vertex buffer needed — the vertex shader uses the built-in gl_VertexID
+// to select points from control-point arrays and a Catmull-Rom spline.
+// Fill:   15 vertices (TRIANGLES)
+// Outline: 64 vertices (LINE_LOOP, Catmull-Rom spline)
 
 // ─── Uniform names (must match GLSL declarations) ───────────────────────────
 const UNIFORM_NAMES = [
@@ -84,6 +91,9 @@ const CURSOR_UNIFORM_NAMES = [
   'u_cursorPos',
   'u_cursorSize',
   'u_resolution',
+  'u_rainbow',
+  'u_time',
+  'u_rotation',
 ] as const;
 
 // ─── ShaderRenderer interface ───────────────────────────────────────────────
@@ -177,6 +187,8 @@ export function createShaderRenderer(): ShaderRenderer {
   let cursorEnabled = false;
   let cursorProgram: WebGLProgram | null = null;
   const cursorUniforms: Record<string, WebGLUniformLocation | null> = {};
+  let cursorVao: WebGLVertexArrayObject | null = null;
+  let cursorVbo: WebGLBuffer | null = null;
   let cursorX = 0.5;
   let cursorY = 0.5;
 
@@ -200,9 +212,9 @@ export function createShaderRenderer(): ShaderRenderer {
         uniforms[name] = gl.getUniformLocation(program, name);
       }
 
-      // 3. Create cursor program if enabled
+      // 3. Create cursor program if enabled (uses its own vertex shader + geometry)
       if (cursorEnabled) {
-        cursorProgram = createProgram(gl, VERTEX_SOURCE, CURSOR_FRAG_SOURCE);
+        cursorProgram = createProgram(gl, CURSOR_VERT_SOURCE, CURSOR_FRAG_SOURCE);
         if (!cursorProgram) {
           console.warn('Custom cursor: failed to compile cursor program — disabling');
           cursorEnabled = false;
@@ -210,11 +222,20 @@ export function createShaderRenderer(): ShaderRenderer {
           for (const name of CURSOR_UNIFORM_NAMES) {
             cursorUniforms[name] = gl.getUniformLocation(cursorProgram, name);
           }
+
+          // Create an empty VAO for the cursor.
+          // The vertex shader uses gl_VertexID to compute all positions
+          // from control-point arrays — no vertex buffer is needed.
+          cursorVao = gl.createVertexArray();
+          gl.bindVertexArray(cursorVao);
+          // No buffers, no attributes — everything comes from gl_VertexID
+          gl.bindVertexArray(null);
+
           console.log('Custom cursor program compiled successfully');
         }
       }
 
-      // 4. VAO / VBO (shared between all programs)
+      // 4. Main VAO / VBO (shared between main programs)
       vao = gl.createVertexArray();
       gl.bindVertexArray(vao);
 
@@ -297,24 +318,41 @@ export function createShaderRenderer(): ShaderRenderer {
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
       // ── Pass 2: Render cursor overlay (if enabled) ──────────────────────
-      if (cursorEnabled && cursorProgram) {
-        // Enable alpha blending so the cursor is transparent on top of the frame
+      if (cursorEnabled && cursorProgram && cursorVao) {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
         gl.useProgram(cursorProgram);
+        gl.bindVertexArray(cursorVao);
 
+        // Set shared uniforms
         if (cursorUniforms.u_cursorPos) {
           gl.uniform2f(cursorUniforms.u_cursorPos, cursorX, cursorY);
         }
-        // Cursor size: 15px radius (scales automatically with DPI via resize)
         if (cursorUniforms.u_cursorSize) {
           gl.uniform1f(cursorUniforms.u_cursorSize, 15.0);
         }
+        if (cursorUniforms.u_resolution) {
+          gl.uniform2f(cursorUniforms.u_resolution, gl.canvas.width, gl.canvas.height);
+        }
+        if (cursorUniforms.u_time) {
+          gl.uniform1f(cursorUniforms.u_time, time);
+        }
 
-        gl.bindVertexArray(vao);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
+        // Draw 1: White fill (TRIANGLES, 3 vertices = 1 triangle)
+        if (cursorUniforms.u_rainbow) {
+          gl.uniform1f(cursorUniforms.u_rainbow, 0.0);
+        }
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        // Draw 2: Rainbow border outline (LINE_LOOP, 3 triangle vertices)
+        if (cursorUniforms.u_rainbow) {
+          gl.uniform1f(cursorUniforms.u_rainbow, 1.0);
+        }
+        gl.drawArrays(gl.LINE_LOOP, 0, 3);
+
+        gl.bindVertexArray(null);
         gl.disable(gl.BLEND);
       }
     },
@@ -327,11 +365,14 @@ export function createShaderRenderer(): ShaderRenderer {
     destroy(gl: WebGL2RenderingContext): void {
       if (vao) gl.deleteVertexArray(vao);
       if (vbo) gl.deleteBuffer(vbo);
+      if (cursorVao) gl.deleteVertexArray(cursorVao);
       if (texture) gl.deleteTexture(texture);
       if (program) gl.deleteProgram(program);
       if (cursorProgram) gl.deleteProgram(cursorProgram);
       vao = null;
       vbo = null;
+      cursorVao = null;
+      cursorVbo = null;
       texture = null;
       program = null;
       cursorProgram = null;

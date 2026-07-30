@@ -7,47 +7,38 @@ precision highp float;
  * Renders a custom cursor overlay on top of the captured frame.
  * Only active when config.custom_cursor is enabled.
  * 
- * The cursor is drawn as a simple circular pointer with a
- * crosshair ring and a bright center dot.
+ * The cursor geometry is provided by cursor.vert and the vertex buffer.
+ * Two draw calls are used:
+ *   1. TRIANGLES  — white filled arrow body (u_rainbow = 0.0)
+ *   2. LINE_LOOP  — animated rainbow border   (u_rainbow = 1.0)
+ * 
+ * Uniforms:
+ *   u_rainbow  — 0.0 = white fill, 1.0 = rainbow border outline
+ *   u_time     — Elapsed time in seconds (for rainbow animation)
+ *   u_resolution — Viewport size in pixels (for position-based rainbow)
  */
 
-in vec2 v_texCoord;
 out vec4 outColor;
 
-uniform vec2  u_cursorPos;   // Normalized cursor position (0.0 – 1.0)
-uniform float u_cursorSize;  // Radius of the cursor in pixels
-uniform vec2  u_resolution;  // Viewport size in pixels
+uniform float u_rainbow;  // 0.0 = fill (white), 1.0 = outline (rainbow)
+uniform float u_time;
+
+// ─── HSV to RGB conversion ──────────────────────────────────────────────────
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
 
 void main() {
-    // Distance from current fragment to cursor center, in pixels
-    vec2  deltaPx  = (v_texCoord - u_cursorPos) * u_resolution;
-    float dist     = length(deltaPx);
+    // White fill
+    if (u_rainbow < 0.5) {
+        outColor = vec4(1.0, 1.0, 1.0, 1.0);
+        return;
+    }
 
-    // ── Cursor shape ──────────────────────────────────────────────────────
-    // Outer ring (radius = u_cursorSize, thickness = 1.5px)
-    float ringOuter = u_cursorSize;
-    float ringInner = u_cursorSize - 1.5;
-    float ring      = smoothstep(ringInner - 0.5, ringInner + 0.5, dist)
-                    * smoothstep(ringOuter + 0.5, ringOuter - 0.5, dist);
-
-    // Crosshair lines (horizontal + vertical, 1px wide)
-    float lineW = 1.0;
-    float cross = 0.0;
-    if (abs(deltaPx.x) < lineW && dist < u_cursorSize * 2.5) cross = 1.0;
-    if (abs(deltaPx.y) < lineW && dist < u_cursorSize * 2.5) cross = 1.0;
-
-    // Center dot (radius = 2px)
-    float dotRadius = 2.0;
-    float dot = 1.0 - smoothstep(dotRadius - 0.5, dotRadius + 0.5, dist);
-
-    // ── Composite ─────────────────────────────────────────────────────────
-    float alpha = max(ring, max(cross, dot));
-    vec3  color = vec3(1.0, 1.0, 1.0);  // White cursor
-
-    // Add a subtle shadow by darkening the area just behind the cursor
-    // (optional — can be disabled by removing this block)
-    // float shadow = 1.0 - smoothstep(0.0, u_cursorSize * 3.0, dist);
-    // color = mix(color, vec3(0.0), shadow * 0.3);
-
-    outColor = vec4(color, alpha);
+    // Rainbow border — colour cycles with time
+    float hue = fract(u_time * 0.25);
+    vec3 rainbow = hsv2rgb(vec3(hue, 1.0, 0.95));
+    outColor = vec4(rainbow, 1.0);
 }
