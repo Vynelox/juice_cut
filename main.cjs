@@ -290,6 +290,13 @@ class WindowManager {
       }
     });
 
+    // Forward mouse position from app_window to shader_window for custom cursor
+    ipcMain.on('cursor-move', (_event, pos) => {
+      if (this.shaderWindow && !this.shaderWindow.isDestroyed()) {
+        this.shaderWindow.webContents.send('cursor-move', pos);
+      }
+    });
+
     // Fallback: get-window-source-id for non-shader mode
     ipcMain.handle('get-window-source-id', () => {
       if (this.appWindow && this.appWindow.webContents) {

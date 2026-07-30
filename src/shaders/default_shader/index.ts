@@ -61,6 +61,7 @@
 
 import VERTEX_SOURCE from './main.vert?raw';
 import FRAGMENT_SOURCE from './main.frag?raw';
+import CURSOR_FRAG_SOURCE from './cursor.frag?raw';
 
 // ─── Fullscreen quad geometry ───────────────────────────────────────────────
 // Position (x,y) + texCoord (u,v) interleaved, using TRIANGLE_STRIP
@@ -79,6 +80,12 @@ const UNIFORM_NAMES = [
   'u_strength',
 ] as const;
 
+const CURSOR_UNIFORM_NAMES = [
+  'u_cursorPos',
+  'u_cursorSize',
+  'u_resolution',
+] as const;
+
 // ─── ShaderRenderer interface ───────────────────────────────────────────────
 export interface ShaderRenderer {
   /** The compiled/linked WebGL program */
@@ -88,7 +95,7 @@ export interface ShaderRenderer {
   readonly uniforms: Record<string, WebGLUniformLocation | null>;
 
   /** Initialise all GPU resources: compile shaders, create program, geometry, texture */
-  init(gl: WebGL2RenderingContext): boolean;
+  init(gl: WebGL2RenderingContext, config?: { customCursor?: boolean }): boolean;
 
   /** Resize viewport and update the resolution uniform */
   resize(gl: WebGL2RenderingContext, width: number, height: number): void;
@@ -96,6 +103,7 @@ export interface ShaderRenderer {
   /**
    * Render a single VideoFrame through the shader.
    * Uploads the frame to the input texture, binds everything, and issues a draw call.
+   * If custom cursor is enabled, the cursor overlay is rendered on top.
    */
   renderFrame(
     gl: WebGL2RenderingContext,
@@ -103,6 +111,13 @@ export interface ShaderRenderer {
     time: number,
     strength: number,
   ): void;
+
+  /**
+   * Update the cursor position in normalized coordinates (0.0 – 1.0).
+   * The cursor is rendered on top of the frame only if custom_cursor was enabled
+   * when init() was called. This method is a no-op otherwise.
+   */
+  setCursorPosition(x: number, y: number): void;
 
   /** Release all GPU resources */
   destroy(gl: WebGL2RenderingContext): void;
@@ -158,6 +173,13 @@ export function createShaderRenderer(): ShaderRenderer {
   let texture: WebGLTexture | null = null;
   const uniforms: Record<string, WebGLUniformLocation | null> = {};
 
+  // ── Cursor state ────────────────────────────────────────────────────────
+  let cursorEnabled = false;
+  let cursorProgram: WebGLProgram | null = null;
+  const cursorUniforms: Record<string, WebGLUniformLocation | null> = {};
+  let cursorX = 0.5;
+  let cursorY = 0.5;
+
   // Track texture dimensions for re-allocation
   let textureWidth = 1;
   let textureHeight = 1;
@@ -166,17 +188,33 @@ export function createShaderRenderer(): ShaderRenderer {
     get program() { return program; },
     get uniforms() { return uniforms; },
 
-    init(gl: WebGL2RenderingContext): boolean {
-      // 1. Create program
+    init(gl: WebGL2RenderingContext, config?: { customCursor?: boolean }): boolean {
+      cursorEnabled = config?.customCursor ?? false;
+
+      // 1. Create main program
       program = createProgram(gl, VERTEX_SOURCE, FRAGMENT_SOURCE);
       if (!program) return false;
 
-      // 2. Fetch uniform locations
+      // 2. Fetch uniform locations for main program
       for (const name of UNIFORM_NAMES) {
         uniforms[name] = gl.getUniformLocation(program, name);
       }
 
-      // 3. VAO / VBO
+      // 3. Create cursor program if enabled
+      if (cursorEnabled) {
+        cursorProgram = createProgram(gl, VERTEX_SOURCE, CURSOR_FRAG_SOURCE);
+        if (!cursorProgram) {
+          console.warn('Custom cursor: failed to compile cursor program — disabling');
+          cursorEnabled = false;
+        } else {
+          for (const name of CURSOR_UNIFORM_NAMES) {
+            cursorUniforms[name] = gl.getUniformLocation(cursorProgram, name);
+          }
+          console.log('Custom cursor program compiled successfully');
+        }
+      }
+
+      // 4. VAO / VBO (shared between all programs)
       vao = gl.createVertexArray();
       gl.bindVertexArray(vao);
 
@@ -192,7 +230,7 @@ export function createShaderRenderer(): ShaderRenderer {
       gl.enableVertexAttribArray(texLoc);
       gl.vertexAttribPointer(texLoc, 2, gl.FLOAT, false, 16, 8);
 
-      // 4. Input texture (initially 1x1, resized on first frame)
+      // 5. Input texture (initially 1x1, resized on first frame)
       texture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -209,6 +247,13 @@ export function createShaderRenderer(): ShaderRenderer {
       if (uniforms.u_resolution) {
         gl.uniform2f(uniforms.u_resolution, width, height);
       }
+      // Also update cursor resolution uniform
+      if (cursorEnabled && cursorProgram) {
+        gl.useProgram(cursorProgram);
+        if (cursorUniforms.u_resolution) {
+          gl.uniform2f(cursorUniforms.u_resolution, width, height);
+        }
+      }
     },
 
     renderFrame(
@@ -217,6 +262,7 @@ export function createShaderRenderer(): ShaderRenderer {
       time: number,
       strength: number,
     ): void {
+      // ── Pass 1: Render the captured frame ───────────────────────────────
       // Re-allocate texture if frame size changed
       if (frame.displayWidth !== textureWidth || frame.displayHeight !== textureHeight) {
         textureWidth = frame.displayWidth;
@@ -235,7 +281,7 @@ export function createShaderRenderer(): ShaderRenderer {
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, frame);
 
-      // Clear and render
+      // Clear and render main frame
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
 
@@ -249,6 +295,33 @@ export function createShaderRenderer(): ShaderRenderer {
 
       gl.bindVertexArray(vao);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      // ── Pass 2: Render cursor overlay (if enabled) ──────────────────────
+      if (cursorEnabled && cursorProgram) {
+        // Enable alpha blending so the cursor is transparent on top of the frame
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        gl.useProgram(cursorProgram);
+
+        if (cursorUniforms.u_cursorPos) {
+          gl.uniform2f(cursorUniforms.u_cursorPos, cursorX, cursorY);
+        }
+        // Cursor size: 15px radius (scales automatically with DPI via resize)
+        if (cursorUniforms.u_cursorSize) {
+          gl.uniform1f(cursorUniforms.u_cursorSize, 15.0);
+        }
+
+        gl.bindVertexArray(vao);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        gl.disable(gl.BLEND);
+      }
+    },
+
+    setCursorPosition(x: number, y: number): void {
+      cursorX = x;
+      cursorY = y;
     },
 
     destroy(gl: WebGL2RenderingContext): void {
@@ -256,10 +329,13 @@ export function createShaderRenderer(): ShaderRenderer {
       if (vbo) gl.deleteBuffer(vbo);
       if (texture) gl.deleteTexture(texture);
       if (program) gl.deleteProgram(program);
+      if (cursorProgram) gl.deleteProgram(cursorProgram);
       vao = null;
       vbo = null;
       texture = null;
       program = null;
+      cursorProgram = null;
+      cursorEnabled = false;
     },
   };
 

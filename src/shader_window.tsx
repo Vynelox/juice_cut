@@ -36,9 +36,11 @@ console.log('PARSE: ShaderRenderer imported');
 async function main() {
   console.log('running async function main()');
   
+  let customCursor = false;
   try {
     const cfg = await fetch('/config.json').then(r => r.json());
-    if (cfg?.custom_cursor) {
+    customCursor = cfg?.custom_cursor ?? false;
+    if (customCursor) {
       document.body.style.cursor = 'none';
       document.documentElement.style.cursor = 'none';
       console.log('Overlay: System cursor hidden via custom_cursor config');
@@ -91,7 +93,7 @@ async function main() {
 
     // ─── Create the shader renderer ──────────────────────────────────────────
     const renderer = createShaderRenderer();
-    const initialized = renderer.init(gl!);
+    const initialized = renderer.init(gl!, { customCursor });
     console.log('CHECKPOINT: ShaderRenderer.init() =', initialized ? 'success' : 'failed');
     if (!initialized) {
       console.error('Overlay: Failed to initialize shader renderer');
@@ -124,6 +126,17 @@ async function main() {
     }
     console.log('CHECKPOINT: notifyShaderWindowReady() called');
 
+    // ── Custom cursor: listen for mouse position from the app window ─────────
+    if (customCursor && api) {
+      api.on('cursor-move', (pos: { x: number; y: number }) => {
+        // Normalize to 0.0 – 1.0 relative to the shader window viewport
+        const nx = pos.x / window.innerWidth;
+        const ny = pos.y / window.innerHeight;
+        renderer.setCursorPosition(nx, ny);
+      });
+      console.log('Custom cursor: listening for mouse position');
+    }
+
     // Step 2: Request display media (Main process will intercept via setDisplayMediaRequestHandler)
     console.log('PIPELINE: Requesting display media (Main process will intercept)');
     try {
@@ -152,8 +165,12 @@ async function main() {
       return;
     }
 
-    // Step 3: Process VideoFrames and render through the shader
-    async function readLoop() {
+    // Step 3: Frame reader — independently consumes frames from the MediaStream
+    // and stores the latest one. Does NOT block the render loop.
+    let latestFrame: VideoFrame | null = null;
+    let rafId = 0;
+
+    async function frameReader() {
       while (!stopped) {
         try {
           const { value, done } = await reader!.read();
@@ -161,28 +178,39 @@ async function main() {
 
           const frame = value as VideoFrame;
 
-          // Render the frame through the shader
-          const time = performance.now() / 1000.0;
-          renderer.renderFrame(gl!, frame, time, 1.0);
-
-          // Close the frame to release GPU memory
-          frame.close();
+          // Close the previous frame to release GPU memory
+          if (latestFrame) latestFrame.close();
+          latestFrame = frame;
         } catch (e) {
           if (!stopped) {
-            console.error('Overlay readLoop error:', e);
+            console.error('Overlay frameReader error:', e);
           }
           break;
         }
       }
     }
 
-    readLoop();
-    console.log('CHECKPOINT: readLoop() started');
+    // Render loop — runs at vsync (60 fps) via requestAnimationFrame
+    // so u_time progresses smoothly regardless of MediaStream frame rate.
+    function renderLoop() {
+      if (stopped) return;
+      if (latestFrame) {
+        const time = performance.now() / 1000.0;
+        renderer.renderFrame(gl!, latestFrame, time, 1.0);
+      }
+      rafId = requestAnimationFrame(renderLoop);
+    }
+
+    frameReader();
+    renderLoop();
+    console.log('CHECKPOINT: frameReader() + renderLoop() started');
 
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => {
       stopped = true;
+      cancelAnimationFrame(rafId);
       reader?.cancel();
+      if (latestFrame) latestFrame.close();
       videoTrack?.stop();
       stream?.getTracks().forEach(t => t.stop());
       renderer.destroy(gl!);
