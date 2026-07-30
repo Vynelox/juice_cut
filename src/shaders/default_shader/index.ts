@@ -7,6 +7,56 @@
  * 
  * shader_window.tsx imports this module and uses the exported ShaderRenderer
  * interface — no need to touch GLSL logic directly.
+ * 
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * 📘 HOW TO MANAGE SHADER FILES
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * 
+ * ── Renaming main.frag or main.vert ──────────────────────────────────────────
+ * 1. Rename the file on disk, e.g. main.frag → my_effect.frag
+ * 2. Update the import path below (line ~12-13) to match:
+ *        import FRAGMENT_SOURCE from './my_effect.frag?raw';
+ * 3. The `?raw` suffix is required — it tells Vite to import the file as a raw
+ *    text string instead of trying to parse it as JavaScript.
+ * 
+ * ── Adding more .frag / .vert / .glsl files ─────────────────────────────────
+ * Any GLSL file in this folder can be imported with `?raw`:
+ * 
+ *     import ADDITIONAL_FRAG from './extra.frag?raw';
+ *     import ADDITIONAL_VERT from './extra.vert?raw';
+ *     import UTILS from './utils.glsl?raw';
+ * 
+ * Use cases:
+ *   • Include a shared GLSL header (e.g. noise functions, colour helpers):
+ *     ── Create a file like `utils.glsl` with your shared code.
+ *     ── Import it above, then concatenate it into the shader source string
+ *        before compiling:
+ *            const finalFrag = UTILS + '\n' + FRAGMENT_SOURCE;
+ *     ── Pass `finalFrag` to `createProgram()` instead of `FRAGMENT_SOURCE`.
+ * 
+ *   • Add a second shader program (e.g. for post-processing passes):
+ *     ── Import the new sources:
+ *         import POST_FRAG from './post.frag?raw';
+ *         import POST_VERT from './post.vert?raw';
+ *     ── In `init()`, create a second program:
+ *         const postProgram = createProgram(gl, POST_VERT, POST_FRAG);
+ *     ── Store it alongside the primary program and use it in `renderFrame()`
+ *        by switching `gl.useProgram(postProgram)` before drawing.
+ * 
+ * ── Removing shader files ────────────────────────────────────────────────────
+ * 1. Delete the file from disk (e.g. `main.frag`).
+ * 2. Remove (or comment out) the matching `import ... from './filename.frag?raw'`
+ *    line below.
+ * 3. Remove any references to that import in the factory code below.
+ * 
+ * ── Switching to a completely different shader set ───────────────────────────
+ * 1. Create a new folder, e.g. `src/shaders/my_shader/`.
+ * 2. Copy this `index.ts` into it as a starting template.
+ * 3. Replace the GLSL files with your own.
+ * 4. In `shader_window.tsx`, change the import to:
+ *        import { createShaderRenderer } from './shaders/my_shader/index';
+ * 
+ * ═══════════════════════════════════════════════════════════════════════════════
  */
 
 import VERTEX_SOURCE from './main.vert?raw';
