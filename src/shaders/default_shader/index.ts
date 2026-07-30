@@ -91,9 +91,7 @@ const CURSOR_UNIFORM_NAMES = [
   'u_cursorPos',
   'u_cursorSize',
   'u_resolution',
-  'u_rainbow',
   'u_time',
-  'u_rotation',
 ] as const;
 
 // ─── ShaderRenderer interface ───────────────────────────────────────────────
@@ -339,18 +337,8 @@ export function createShaderRenderer(): ShaderRenderer {
           gl.uniform1f(cursorUniforms.u_time, time);
         }
 
-
-        // Draw 1: White fill (TRIANGLES, 3 vertices = 1 triangle)
-        if (cursorUniforms.u_rainbow) {
-          gl.uniform1f(cursorUniforms.u_rainbow, 0.0);
-        }
+        // Draw: plasma fill (TRIANGLES, 3 vertices = 1 triangle)
         gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-        // Draw 2: Rainbow border outline (LINE_LOOP, 3 triangle vertices)
-        if (cursorUniforms.u_rainbow) {
-          gl.uniform1f(cursorUniforms.u_rainbow, 1.0);
-        }
-        gl.drawArrays(gl.LINE_LOOP, 0, 3);
 
         gl.bindVertexArray(null);
         gl.disable(gl.BLEND);
