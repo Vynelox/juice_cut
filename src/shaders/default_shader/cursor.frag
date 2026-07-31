@@ -7,12 +7,14 @@ precision highp float;
  * Renders a custom cursor overlay on top of the captured frame.
  * Only active when config.custom_cursor is enabled.
  * 
- * The cursor geometry is provided by cursor.vert and the vertex buffer.
- * Single draw call: TRIANGLES — plasma warping pattern fill with beveled underside
+ * The cursor geometry is provided by cursor.vert and includes rounded corners
+ * via vertex geometry. This fragment shader handles the color mapping and noise pattern.
+ * 
+ * Single draw call: TRIANGLES — fBM noise pattern with custom colormap
  * 
  * Uniforms:
- *   u_time       — Elapsed time in seconds (for plasma animation)
- *   u_cursorSize — Base scale of the cursor in pixels (for scaling plasma)
+ *   u_time       — Elapsed time in seconds (for animation)
+ *   u_cursorSize — Base scale of the cursor in pixels
  *   u_resolution — Viewport size in pixels
  */
 
@@ -23,91 +25,141 @@ uniform float u_time;
 uniform float u_cursorSize;
 uniform vec2 u_resolution;
 
-// ─── Plasma warping pattern ───────────────────────────────────────────────────
-// Classic plasma effect using sine wave interference
-float plasma(vec2 uv, float time) {
-    // Scale UV coordinates for pattern density
-    vec2 p = uv * 10.0;
-    
-    // Multiple sine waves at different frequencies and phases
-    float v = 0.0;
-    v += sin(p.x + time * 1.5);
-    v += sin(p.y + time * 1.2);
-    v += sin(p.x + p.y + time * 1.8);
-    v += sin(sqrt(p.x * p.x + p.y * p.y) * 3.0 + time * 2.0);
-    v += sin(p.x * 2.0 - p.y * 1.5 + time * 1.0);
-    
-    return v * 0.2;  // Scale to -1 to 1 range
+// ─── Colormap functions ───────────────────────────────────────────────────────
+float colormap_red(float x) {
+    if (x < 0.0) {
+        return 54.0 / 255.0;
+    } else if (x < 20049.0 / 82979.0) {
+        return (829.79 * x + 54.51) / 255.0;
+    } else {
+        return 1.0;
+    }
 }
 
-// ─── HSV to RGB conversion ──────────────────────────────────────────────────
-vec3 hsv2rgb(vec3 c) {
-    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+float colormap_green(float x) {
+    if (x < 20049.0 / 82979.0) {
+        return 0.0;
+    } else if (x < 327013.0 / 810990.0) {
+        return (8546482679670.0 / 10875673217.0 * x - 2064961390770.0 / 10875673217.0) / 255.0;
+    } else if (x <= 1.0) {
+        return (103806720.0 / 483977.0 * x + 19607415.0 / 483977.0) / 255.0;
+    } else {
+        return 1.0;
+    }
 }
 
-// ─── Smooth step function for smoother color transitions ─────────────────────
-float smoothStep(float edge0, float edge1, float x) {
-    float t = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
-    return t * t * (3.0 - 2.0 * t);
+float colormap_blue(float x) {
+    if (x < 0.0) {
+        return 54.0 / 255.0;
+    } else if (x < 7249.0 / 82979.0) {
+        return (829.79 * x + 54.51) / 255.0;
+    } else if (x < 20049.0 / 82979.0) {
+        return 127.0 / 255.0;
+    } else if (x < 327013.0 / 810990.0) {
+        return (792.02249341361393720147485376583 * x - 64.364790735602331034989206222672) / 255.0;
+    } else {
+        return 1.0;
+    }
 }
 
-// ─── Bevel effect for underside (base edge) ───────────────────────────────────
-// The triangle base is at v_uv.y ≈ 1.0, spanning from v_uv.x = 0 to 1
-// Returns a highlight/shadow factor for the bevel
-float bevelUnderside(vec2 uv) {
-    // Distance from base edge (y = 1)
-    float distFromBase = 1.0 - uv.y;
+vec4 colormap(float x) {
+    return vec4(colormap_red(x), colormap_green(x), colormap_blue(x), 1.0);
+}
+
+// ─── Noise and fBM functions ─────────────────────────────────────────────────
+float rand(vec2 n) { 
+    return fract(sin(dot(n, vec2(12.9898, 4.1414))) * 43758.5453);
+}
+
+float noise(vec2 p){
+    vec2 ip = floor(p);
+    vec2 u = fract(p);
+    u = u*u*(3.0-2.0*u);
+
+    float res = mix(
+        mix(rand(ip),rand(ip+vec2(1.0,0.0)),u.x),
+        mix(rand(ip+vec2(0.0,1.0)),rand(ip+vec2(1.0,1.0)),u.x),u.y);
+    return res*res;
+}
+
+const mat2 mtx = mat2( 0.80,  0.60, -0.60,  0.80 );
+
+float fbm( vec2 p )
+{
+    float f = 0.0;
+
+    f += 0.500000*noise( p + u_time  ); p = mtx*p*2.02;
+    f += 0.031250*noise( p ); p = mtx*p*2.01;
+    f += 0.250000*noise( p ); p = mtx*p*2.03;
+    f += 0.125000*noise( p ); p = mtx*p*2.01;
+    f += 0.062500*noise( p ); p = mtx*p*2.04;
+    f += 0.015625*noise( p + sin(u_time) );
+
+    return f/0.96875;
+}
+
+float pattern( in vec2 p )
+{
+    return fbm( p + fbm( p + fbm( p ) ) );
+}
+
+// ─── Edge distance for border ────────────────────────────────────────────────
+// Triangle vertices in UV space:
+// v0 = (0.5, 0.0) - tip
+// v1 = (0.0, 1.0) - base left
+// v2 = (1.0, 1.0) - base right
+//
+// Edges:
+// edge0: v0 -> v1 (left edge)
+// edge1: v1 -> v2 (base edge)
+// edge2: v2 -> v0 (right edge)
+
+float edgeDistance(vec2 p, vec2 a, vec2 b) {
+    // Distance from point p to line segment ab
+    vec2 ab = b - a;
+    vec2 ap = p - a;
+    float t = clamp(dot(ap, ab) / dot(ab, ab), 0.0, 1.0);
+    vec2 closest = a + ab * t;
+    return length(p - closest);
+}
+
+float triangleEdgeDistance(vec2 uv) {
+    vec2 v0 = vec2(0.5, 0.0);
+    vec2 v1 = vec2(0.0, 1.0);
+    vec2 v2 = vec2(1.0, 1.0);
     
-    // Width of bevel region (in UV space)
-    float bevelWidth = 0.16;
+    float d0 = edgeDistance(uv, v0, v1);  // left edge
+    float d1 = edgeDistance(uv, v1, v2);  // base edge
+    float d2 = edgeDistance(uv, v2, v0);  // right edge
     
-    // Smooth falloff from base edge
-    float bevelFactor = smoothStep(bevelWidth, 0.0, distFromBase);
-    
-    // Add variation along the base edge for a more organic feel
-    float edgeVariation = sin(uv.x * 20.0 + u_time * 3.0) * 0.3 + 0.7;
-    bevelFactor *= edgeVariation;
-    
-    return bevelFactor;
+    return min(min(d0, d1), d2);
 }
 
 void main() {
-    // Get plasma value at this UV coordinate
-    float plasmaVal = plasma(v_uv, u_time);
+    // Scale UV coordinates for pattern density
+    vec2 uv = v_uv * 10.0;
     
-    // Map plasma value (-1 to 1) to hue (0 to 1)
-    float hue = plasmaVal * 0.5 + 0.5 + u_time * 0.1;
-    hue = fract(hue);
+    // Generate pattern using fBM
+    float shade = pattern(uv);
     
-    // Create dynamic saturation and value based on plasma
-    float sat = 0.8 + 0.2 * sin(plasmaVal * 3.14159 + u_time);
-    float val = 0.7 + 0.3 * cos(plasmaVal * 2.0 + u_time * 0.5);
+    // Apply colormap
+    vec4 color = colormap(shade);
     
-    // Convert to RGB
-    vec3 color = hsv2rgb(vec3(hue, sat, val));
+    // Calculate distance to triangle edges for border
+    float edgeDist = triangleEdgeDistance(v_uv);
     
-    // Add subtle glow at edges using UV distance from center
-    float distFromCenter = length(v_uv - vec2(0.5, 0.5));
-    float edgeGlow = smoothStep(0.5, 0.3, distFromCenter) * 0.3;
-    color += vec3(edgeGlow);
+    // Border width in UV space
+    float borderWidth = 0.12;
     
-    // ─── Bevel on underside (base of triangle) ──────────────────────────────
-    float bevel = bevelUnderside(v_uv);
+    // Create rounded border effect using smoothstep
+    float borderAlpha = smoothstep(borderWidth, 0.0, edgeDist);
     
-    // Highlight on the very edge (catching light)
-    float highlight = smoothStep(0.02, 0.0, 1.0 - v_uv.y) * 0.4;
+    // Debug: visualize edge distance (uncomment to debug)
+    // vec3 finalColor = vec3(edgeDist * 10.0);
     
-    // Shadow just above the highlight (recessed look)
-    float shadow = smoothStep(0.06, 0.02, 1.0 - v_uv.y) * -0.25;
+    // Mix pattern color with black border
+    vec3 finalColor = mix(vec3(0.0, 0.0, 0.0), color.rgb, 1.0 - borderAlpha);
     
-    // Apply bevel shading
-    color += vec3(highlight + shadow) * bevel;
-    
-    // Add time-based pulsing brightness
-    float pulse = 0.9 + 0.1 * sin(u_time * 2.0);
-    color *= pulse;
-    
-    outColor = vec4(color, 1.0);
+    // Ensure alpha is fully opaque
+    outColor = vec4(finalColor, 1.0);
 }

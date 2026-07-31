@@ -315,34 +315,34 @@ export function createShaderRenderer(): ShaderRenderer {
       gl.bindVertexArray(vao);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-      // ── Pass 2: Render cursor overlay (if enabled) ──────────────────────
-      if (cursorEnabled && cursorProgram && cursorVao) {
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        // ── Pass 2: Render cursor overlay (if enabled) ──────────────────────
+        if (cursorEnabled && cursorProgram && cursorVao) {
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-        gl.useProgram(cursorProgram);
-        gl.bindVertexArray(cursorVao);
+          gl.useProgram(cursorProgram);
+          gl.bindVertexArray(cursorVao);
 
-        // Set shared uniforms
-        if (cursorUniforms.u_cursorPos) {
-          gl.uniform2f(cursorUniforms.u_cursorPos, cursorX, cursorY);
-        }
-        if (cursorUniforms.u_cursorSize) {
-          gl.uniform1f(cursorUniforms.u_cursorSize, 15.0);
-        }
-        if (cursorUniforms.u_resolution) {
-          gl.uniform2f(cursorUniforms.u_resolution, gl.canvas.width, gl.canvas.height);
-        }
-        if (cursorUniforms.u_time) {
-          gl.uniform1f(cursorUniforms.u_time, time);
-        }
+          // Set shared uniforms
+          if (cursorUniforms.u_cursorPos) {
+            gl.uniform2f(cursorUniforms.u_cursorPos, cursorX, cursorY);
+          }
+          if (cursorUniforms.u_cursorSize) {
+            gl.uniform1f(cursorUniforms.u_cursorSize, 15.0);
+          }
+          if (cursorUniforms.u_resolution) {
+            gl.uniform2f(cursorUniforms.u_resolution, gl.canvas.width, gl.canvas.height);
+          }
+          if (cursorUniforms.u_time) {
+            gl.uniform1f(cursorUniforms.u_time, time);
+          }
 
-        // Draw: plasma fill (TRIANGLES, 3 vertices = 1 triangle)
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
+          // Draw: plasma fill (TRIANGLES, 3 vertices = 1 triangle)
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-        gl.bindVertexArray(null);
-        gl.disable(gl.BLEND);
-      }
+          gl.bindVertexArray(null);
+          gl.disable(gl.BLEND);
+        }
     },
 
     setCursorPosition(x: number, y: number): void {
