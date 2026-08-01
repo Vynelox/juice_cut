@@ -54,41 +54,38 @@ class WindowManager {
       LOWEST_POSSIBLE_OPACITY
     );
 
-    // Get primary display for fullscreen dimensions
-    const { screen } = require('electron');
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const { width, height } = primaryDisplay.workAreaSize;
-
+    // Create at default size; maximize after 5 seconds once loaded
     this.appWindow = new BrowserWindow({
       ...WINDOW_DEFAULTS,
-      width,
-      height,
       frame: false,
       skipTaskbar: false,
       icon: WIN_ICON,
       opacity,
-      fullscreen: true, // Launch in fullscreen mode
       webPreferences: WEB_PREFERENCES,
     });
-
     this.appWindow.setTitle(APP_TITLE);
     this.appWindow.loadURL('http://localhost:5173');
-    console.log('✅ app_window created (fullscreen)');
+    
+    // Maximize 5 seconds after the window finishes loading
+    this.appWindow.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        if (this.appWindow && !this.appWindow.isDestroyed()) {
+          this.appWindow.maximize();
+          console.log('✅ app_window maximized after 5s delay');
+        }
+      }, 1);
+    });
+    
+    console.log('✅ app_window created (regular size, will maximize after 5s)');
     return this.appWindow;
   }
 
   createShaderWindow() {
     if (!this.cfg.shaderWindow || !this.appWindow) return null;
 
-    // Get primary display for fullscreen dimensions to match parent
-    const { screen } = require('electron');
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const { width, height } = primaryDisplay.workAreaSize;
-
+    // Create shader window at default size matching parent; will sync when parent maximizes
     this.shaderWindow = new BrowserWindow({
       ...WINDOW_DEFAULTS,
-      width,
-      height,
       x: 0,
       y: 0,
       frame: false,
@@ -108,30 +105,33 @@ class WindowManager {
     }
 
     this.shaderWindow.loadURL('http://localhost:5173/shader_window.html');
-    console.log('✅ shader_window created (fullscreen)');
+    console.log('✅ shader_window created (regular size, will sync when parent maximizes)');
     return this.shaderWindow;
   }
 
   createFallbackWindow() {
-    // Get primary display for fullscreen dimensions
-    const { screen } = require('electron');
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const { width, height } = primaryDisplay.workAreaSize;
-
+    // Create at default size; maximize after 5 seconds once loaded
     this.appWindow = new BrowserWindow({
       ...WINDOW_DEFAULTS,
-      width,
-      height,
       frame: false,
       skipTaskbar: false,
       opacity: 1,
       icon: WIN_ICON,
-      fullscreen: true, // Launch in fullscreen mode
       webPreferences: WEB_PREFERENCES,
     });
-
     this.appWindow.loadURL('http://localhost:5173');
-    console.log('✅ fallback app_window created (fullscreen)');
+    
+    // Maximize 5 seconds after the window finishes loading
+    this.appWindow.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        if (this.appWindow && !this.appWindow.isDestroyed()) {
+          this.appWindow.maximize();
+          console.log('✅ fallback app_window maximized after 5s delay');
+        }
+      }, 5000);
+    });
+    
+    console.log('✅ fallback app_window created (regular size, will maximize after 5s)');
     return this.appWindow;
   }
 
@@ -281,6 +281,13 @@ class WindowManager {
         this.appWindow.unmaximize();
       } else {
         this.appWindow.maximize();
+      }
+    });
+    ipcMain.on('window-fullscreen', () => {
+      if (this.appWindow.isFullScreen()) {
+        this.appWindow.setFullScreen(false);
+      } else {
+        this.appWindow.setFullScreen(true);
       }
     });
     ipcMain.on('window-close', () => {

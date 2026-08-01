@@ -288,6 +288,11 @@ export function createShaderRenderer(): ShaderRenderer {
         textureHeight = frame.displayHeight;
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+
+        // 🔥 Stops the browser from doing a slow CPU-side color space conversion
+        gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE); 
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); // Ensures tight memory packing
+        
         gl.texImage2D(
           gl.TEXTURE_2D, 0, gl.RGBA,
           textureWidth, textureHeight, 0,

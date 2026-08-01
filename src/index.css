@@ -980,6 +980,16 @@ html, body, #root {
   box-shadow: 0 0 8px #f87171, 0 0 16px #f87171;
 }
 
+/* Blue fullscreen button */
+.status-dot-blue {
+  background: #3b82f6;
+}
+.status-dot-blue:hover {
+  transform: scale(1.3);
+  filter: brightness(1.3);
+  box-shadow: 0 0 8px #3b82f6, 0 0 16px #3b82f6;
+}
+
 /* Torus Menu */
 .torus-overlay {
   position: fixed;

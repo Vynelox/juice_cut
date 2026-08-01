@@ -81,7 +81,8 @@ async function main() {
       alpha: true,
       premultipliedAlpha: false,
       preserveDrawingBuffer: false,
-      antialias: true
+      antialias: false,
+      powerPreference: 'high-performance' // 🔥 Forces the dedicated GPU (Nvidia/AMD) instead of the weak integra
     });
     console.log('CHECKPOINT: canvas.getContext(webgl2) =', gl ? 'success' : 'null');
     if (!gl) {
