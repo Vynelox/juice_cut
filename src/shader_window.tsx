@@ -138,6 +138,33 @@ async function main() {
       console.log('Custom cursor: listening for mouse position');
     }
 
+
+    // 🖥️📺 Detect monitor refresh rate by measuring requestAnimationFrame timing
+    const detectRefreshRate = (): Promise<number> => {
+      return new Promise((resolve) => {
+        let frameCount = 0;
+        let startTime = performance.now();
+        
+        const measureFrame = () => {
+          frameCount++;
+          const elapsed = performance.now() - startTime;
+          
+          if (elapsed >= 1000) {
+            const fps = Math.round((frameCount * 1000) / elapsed);
+            resolve(fps);
+          } else {
+            requestAnimationFrame(measureFrame);
+          }
+        };
+        
+        requestAnimationFrame(measureFrame);
+      });
+    };
+
+    // 🟢 run the function
+    const monitorRefreshRate = await detectRefreshRate();
+    console.log(`🖥️ Detected monitor refresh rate: ${monitorRefreshRate}Hz`);
+
     // Step 2: Request display media (Main process will intercept via setDisplayMediaRequestHandler)
     console.log('PIPELINE: Requesting display media (Main process will intercept)');
     try {
@@ -147,7 +174,7 @@ async function main() {
         // This tells the capture engine to EXCLUDE the cursor from the video stream.
         video: {
           cursor: 'never',
-          frameRate: {ideal: 144}
+          frameRate: {ideal: monitorRefreshRate}
         } as any,
         audio: false,
       });
