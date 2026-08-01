@@ -171,6 +171,11 @@ async function main() {
     let latestFrame: VideoFrame | null = null;
     let rafId = 0;
 
+    // 🔥 NEW: Variables to track the actual video frame delivery rate
+    let videoFrameCount = 0;
+    let videoFrameStartTime = performance.now();
+    // 🔥 ----------------------
+
     async function frameReader() {
       while (!stopped) {
         try {
@@ -178,6 +183,20 @@ async function main() {
           if (done || !value) break;
 
           const frame = value as VideoFrame;
+
+          // 🔥 NEW: Count each new video frame delivered by the capture pipeline
+          videoFrameCount++;
+          const now = performance.now();
+          if (now - videoFrameStartTime >= 1000) {
+            console.log(`📹 VIDEO STREAM FPS: ${videoFrameCount}`);
+              if (api) {
+              api.send('shader-fps', videoFrameCount);
+            }
+            videoFrameCount = 0;
+            videoFrameStartTime = now;
+          }
+          
+          // 🔥 ----------------------
 
           // Close the previous frame to release GPU memory
           if (latestFrame) latestFrame.close();
@@ -199,24 +218,29 @@ async function main() {
 
     function renderLoop() {
       if (stopped) return;
+
+      const now = performance.now();
+
+      // 🔥 ONLY DRAW AND COUNT IF WE HAVE A FRAME
       if (latestFrame) {
-        const time = performance.now() / 1000.0;
+        const time = now / 1000.0;
         renderer.renderFrame(gl!, latestFrame, time, 1.0);
+        
+        // Increment counter ONLY when a frame is actually rendered to the screen
+        frameCount++; 
       }
+
       rafId = requestAnimationFrame(renderLoop);
 
-      // ── FPS Counter ──────────────────────────────────────────────────────
-      frameCount++;
-      const now = performance.now();
+      // Calculate FPS every second
       const elapsed = now - fpsStartTime;
       if (elapsed >= 1000) {
         fps = Math.round((frameCount * 1000) / elapsed);
         frameCount = 0;
         fpsStartTime = now;
-        // Send FPS to main process → forwarded to app window
-        if (api) {
-          api.send('shader-fps', fps);
-        }
+        
+        // Send to main process
+        
       }
     }
 

@@ -90,8 +90,6 @@ class WindowManager {
       x: 0,
       y: 0,
       frame: false,
-      transparent: true,
-      backgroundColor: '#00000000',
       hasShadow: false,
       skipTaskbar: false,
       icon: WIN_ICON,
