@@ -71,12 +71,12 @@ class WindowManager {
       setTimeout(() => {
         if (this.appWindow && !this.appWindow.isDestroyed()) {
           this.appWindow.maximize();
-          console.log('✅ app_window maximized after 5s delay');
+          console.log('✅ app_window maximized after 1ms delay');
         }
       }, 1);
     });
     
-    console.log('✅ app_window created (regular size, will maximize after 5s)');
+    console.log('✅ app_window created (regular size, will maximize after 1ms)');
     return this.appWindow;
   }
 
