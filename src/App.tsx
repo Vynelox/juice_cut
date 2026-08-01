@@ -33,6 +33,8 @@ const DEFAULT_IMAGE_DURATION = 5 * FPS;
 const WINDOW_BUTTONS_SPACING = 10; //px
 const WINDOW_BUTTONS_SIZE = 15; //px
 const TOP_BAR_MENU_BUTTONS_SPACING = 0; //px
+const header_font_size = 15;
+
 
 // Initialize modal manager permissions
 registerModalPermissions();
@@ -741,12 +743,23 @@ function AppContent() {
         }}
       >
         <div className="app-logo">
-          <img src="/src/67_editing_software.ico" alt="67 editing software" style={{ width: 22, height: 22 }} />
-          <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>67 editing software</span>
-          <span className="fps-counter" style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 8, fontWeight: 500 }}>
-            fps: {shaderFps ?? '--'}
-          </span>
+          <img src="/src/67_editing_software.ico" alt="67 editing software" style={{ width: 22, height: 22, transform: 'translateY(0px)', }} />
+        
+
+          {/*67 editing software title*/}
+          <span style={{
+            fontSize: header_font_size,
+            color: 'var(--text-secondary)',
+            fontWeight: 500,
+            verticalAlign: 'bottom',
+            transform: 'translateY(1px)',
+            position: 'relative',
+            minWidth: '200px',      // 🔥 Reserve space for "fps: 999"
+            }}>67 editing software | fps: {shaderFps ?? '--'}</span>
+          {/* fps counter title */}
         </div>
+
+        
         <div style={{ display: 'flex', gap: TOP_BAR_MENU_BUTTONS_SPACING, alignItems: 'center', marginLeft: WINDOW_BUTTONS_SPACING }}>
           <button className="icon-btn" onClick={() => {
             const result = modalManager.requestOpen('styles');
