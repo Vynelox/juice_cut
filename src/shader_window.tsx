@@ -145,7 +145,10 @@ async function main() {
       stream = await navigator.mediaDevices.getDisplayMedia({
         // 'as any' bypasses the TypeScript error.
         // This tells the capture engine to EXCLUDE the cursor from the video stream.
-        video: { cursor: 'never' } as any,
+        video: {
+          cursor: 'never',
+          frameRate: {ideal: 144}
+        } as any,
         audio: false,
       });
       console.log('✅ SUCCESS: MediaStream acquired, track count:', stream.getVideoTracks().length);

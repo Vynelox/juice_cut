@@ -92,6 +92,8 @@ class WindowManager {
       frame: false,
       hasShadow: false,
       skipTaskbar: false,
+      transparent: false, //making this true kills the fps
+      backgroundColor: '#00000000',
       icon: WIN_ICON,
       show: true,
       parent: this.appWindow,   // Locks Z-order: child always on top of parent
