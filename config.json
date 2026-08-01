@@ -4,7 +4,7 @@
     "slideshow": false,
     "shader_window": true,
     "open_shader_window_inspector": false,
-    "base_window_transparency": 0.5,
+    "base_window_transparency": 0.004,
     "shader_window_clickthrough": true,
     "app_window_clickthrough": false,
     "sync_windows": true,

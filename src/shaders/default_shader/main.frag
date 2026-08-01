@@ -56,5 +56,5 @@ void main() {
   float vignette = 1.0 - length(uv - 0.5) * 0.5;
   finalColor *= vignette;
   
-  outColor = vec4(finalColor, tornColor.a);
+  outColor = vec4(finalColor.bgr, tornColor.a);
 }

@@ -74,7 +74,7 @@ async function main() {
     console.log('CHECKPOINT: canvas created and appended to root');
 
     // 🔥 Fallback background to prove the window is alive
-    canvas.style.backgroundColor = 'rgba(255, 0, 0, 0.3)';
+    canvas.style.backgroundColor = 'var(--bg-panel)';
     console.log('CHECKPOINT: canvas background color set');
 
     const gl = canvas.getContext('webgl2', {

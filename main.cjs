@@ -3,6 +3,8 @@ const path = require('path');
 const { app, BrowserWindow, ipcMain, desktopCapturer, session } = require('electron');
 const config = require('./config.json');
 
+
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 const LOWEST_POSSIBLE_OPACITY = 0.004;
 const APP_TITLE = '67-editing-software-main';
