@@ -382,6 +382,17 @@ function AppContent() {
     }
   }, []);
 
+  // Track mouse position for custom cursor overlay (sent to main process → forwarded to shader_window)
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!api?.send) return;
+    const handler = (e: MouseEvent) => {
+      api.send('cursor-move', { x: e.clientX, y: e.clientY });
+    };
+    document.addEventListener('mousemove', handler);
+    return () => document.removeEventListener('mousemove', handler);
+  }, []);
+
   // Styles back/close: goes back one level if inside a sub-page, otherwise closes
   const handleStyleBackOrClose = useCallback(() => {
     if (stylePage) {
