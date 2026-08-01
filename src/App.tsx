@@ -96,6 +96,47 @@ function AppContent() {
   const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [hasModalOpen, setHasModalOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [shaderFps, setShaderFps] = useState<number | null>(null);
+  const [shaderEnabled, setShaderEnabled] = useState(false);
+  
+  // Check if shader window is enabled from config
+  useEffect(() => {
+    fetch('/config.json')
+      .then(r => r.json())
+      .then(cfg => setShaderEnabled(!!cfg?.shader_window))
+      .catch(() => setShaderEnabled(false));
+  }, []);
+
+  // Listen for FPS updates from the shader window (forwarded via main process)
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!api?.on) return;
+    api.on('shader-fps', (fps: number) => {
+      setShaderFps(fps);
+    });
+  }, []);
+
+  // When shader window is disabled, measure the app window's own FPS
+  useEffect(() => {
+    if (shaderEnabled) return; // Only measure app FPS when shader is disabled
+    let rafId = 0;
+    let frameCount = 0;
+    let fpsStartTime = performance.now();
+    
+    const measureFps = () => {
+      frameCount++;
+      const now = performance.now();
+      const elapsed = now - fpsStartTime;
+      if (elapsed >= 1000) {
+        setShaderFps(Math.round((frameCount * 1000) / elapsed));
+        frameCount = 0;
+        fpsStartTime = now;
+      }
+      rafId = requestAnimationFrame(measureFps);
+    };
+    rafId = requestAnimationFrame(measureFps);
+    return () => cancelAnimationFrame(rafId);
+  }, [shaderEnabled]);
 
   // settings (persisted)
   const [playheadTop, setPlayheadTop] = useState<number>(() => {
@@ -701,7 +742,10 @@ function AppContent() {
       >
         <div className="app-logo">
           <img src="/src/67_editing_software.ico" alt="67 editing software" style={{ width: 22, height: 22 }} />
-          <span>67 editing software</span>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>67 editing software</span>
+          <span className="fps-counter" style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 8, fontWeight: 500 }}>
+            fps: {shaderFps ?? '--'}
+          </span>
         </div>
         <div style={{ display: 'flex', gap: TOP_BAR_MENU_BUTTONS_SPACING, alignItems: 'center', marginLeft: WINDOW_BUTTONS_SPACING }}>
           <button className="icon-btn" onClick={() => {

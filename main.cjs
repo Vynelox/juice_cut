@@ -9,6 +9,7 @@ const APP_TITLE = '67-editing-software-main';
 const WINDOW_DEFAULTS = { width: 1280, height: 800 };
 const WIN_PRELOAD = path.join(__dirname, 'preload.cjs');
 const WIN_ICON = path.join(__dirname, 'src/67_editing_software.ico');
+const maximize_delay = 1;
 
 // ─── Config validation with defaults ─────────────────────────────────────────
 function loadConfig() {
@@ -66,17 +67,17 @@ class WindowManager {
     this.appWindow.setTitle(APP_TITLE);
     this.appWindow.loadURL('http://localhost:5173');
     
-    // Maximize 5 seconds after the window finishes loading
+    // Maximize after the delay once the window finishes loading
     this.appWindow.webContents.once('did-finish-load', () => {
       setTimeout(() => {
         if (this.appWindow && !this.appWindow.isDestroyed()) {
           this.appWindow.maximize();
-          console.log('✅ app_window maximized after 1ms delay');
+          console.log(`✅ app_window maximized after ${maximize_delay}ms delay`);
         }
-      }, 1);
+      }, maximize_delay);
     });
     
-    console.log('✅ app_window created (regular size, will maximize after 1ms)');
+    console.log(`✅ app_window created (regular size, will maximize after ${maximize_delay}ms)`);
     return this.appWindow;
   }
 
@@ -121,17 +122,17 @@ class WindowManager {
     });
     this.appWindow.loadURL('http://localhost:5173');
     
-    // Maximize 5 seconds after the window finishes loading
+    // Maximize after the delay once the window finishes loading
     this.appWindow.webContents.once('did-finish-load', () => {
       setTimeout(() => {
         if (this.appWindow && !this.appWindow.isDestroyed()) {
           this.appWindow.maximize();
-          console.log('✅ fallback app_window maximized after 5s delay');
+          console.log(`✅ fallback app_window maximized after ${maximize_delay}ms delay`);
         }
-      }, 5000);
+      }, maximize_delay);
     });
     
-    console.log('✅ fallback app_window created (regular size, will maximize after 5s)');
+    console.log(`✅ fallback app_window created (regular size, will maximize after ${maximize_delay}ms)`);
     return this.appWindow;
   }
 
@@ -324,6 +325,13 @@ class WindowManager {
     ipcMain.on('cursor-move', (_event, pos) => {
       if (this.shaderWindow && !this.shaderWindow.isDestroyed()) {
         this.shaderWindow.webContents.send('cursor-move', pos);
+      }
+    });
+
+    // Forward FPS from shader_window to app_window for the FPS counter display
+    ipcMain.on('shader-fps', (_event, fps) => {
+      if (this.appWindow && !this.appWindow.isDestroyed()) {
+        this.appWindow.webContents.send('shader-fps', fps);
       }
     });
 
