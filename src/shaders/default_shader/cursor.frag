@@ -174,8 +174,6 @@ void main() {
     // Convert to HSV, replace hue, saturation, and brightness with median theme values, convert back to RGB
     vec3 hsv = rgb2hsv(color.rgb);
     hsv.x = u_medianHue;
-    hsv.y = u_medianSat;
-    hsv.z = u_medianBright;
     color.rgb = hsv2rgb(hsv);
     
     // Calculate distance to triangle edges for border
