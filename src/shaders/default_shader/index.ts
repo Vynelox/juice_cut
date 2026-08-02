@@ -88,6 +88,7 @@ const UNIFORM_NAMES = [
   'u_themeColors',
   'u_medianHue',
   'u_medianSat',
+  'u_medianBright',
 ] as const;
 
 const CURSOR_UNIFORM_NAMES = [
@@ -97,6 +98,7 @@ const CURSOR_UNIFORM_NAMES = [
   'u_time',
   'u_medianHue',
   'u_medianSat',
+  'u_medianBright',
 ] as const;
 
 // ─── ShaderRenderer interface ───────────────────────────────────────────────
@@ -134,6 +136,9 @@ export interface ShaderRenderer {
 
   /** Update the median saturation value on the GPU (0.0–1.0) */
   updateMedianSat(sat: number): void;
+
+  /** Update the median brightness value on the GPU (0.0–1.0) */
+  updateMedianBright(bright: number): void;
 
   /**
    * Update the cursor position in normalized coordinates (0.0 – 1.0).
@@ -217,6 +222,9 @@ export function createShaderRenderer(): ShaderRenderer {
 
   // Median saturation of the theme colors (0.0–1.0)
   let medianSatValue = 0.0;
+
+  // Median brightness of the theme colors (0.0–1.0)
+  let medianBrightValue = 0.0;
 
   const renderer: ShaderRenderer = {
     get program() { return program; },
@@ -311,6 +319,10 @@ export function createShaderRenderer(): ShaderRenderer {
       medianSatValue = sat;
     },
 
+    updateMedianBright(bright: number): void {
+      medianBrightValue = bright;
+    },
+
     renderFrame(
       gl: WebGL2RenderingContext,
       frame: VideoFrame,
@@ -370,6 +382,11 @@ export function createShaderRenderer(): ShaderRenderer {
         gl.uniform1f(uniforms.u_medianSat, medianSatValue);
       }
 
+      // Push median brightness to GPU
+      if (uniforms.u_medianBright) {
+        gl.uniform1f(uniforms.u_medianBright, medianBrightValue);
+      }
+
       gl.bindVertexArray(vao);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
@@ -399,6 +416,9 @@ export function createShaderRenderer(): ShaderRenderer {
           }
           if (cursorUniforms.u_medianSat) {
             gl.uniform1f(cursorUniforms.u_medianSat, medianSatValue);
+          }
+          if (cursorUniforms.u_medianBright) {
+            gl.uniform1f(cursorUniforms.u_medianBright, medianBrightValue);
           }
 
           // Draw: plasma fill (TRIANGLES, 3 vertices = 1 triangle)

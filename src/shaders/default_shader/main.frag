@@ -23,6 +23,10 @@ uniform float u_medianHue;
 // Calculated by App.tsx: converts all 17 theme colors to HSL, sorts by saturation, picks the middle value
 uniform float u_medianSat;
 
+// Median brightness of all theme colors (0.0–1.0)
+// Calculated by App.tsx: converts all 17 theme colors to HSL, sorts by brightness (lightness), picks the middle value
+uniform float u_medianBright;
+
 void main(){
   outColor = texture(u_texture, v_texCoord);
 }
