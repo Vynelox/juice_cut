@@ -232,12 +232,18 @@ class WindowManager {
         .then((sources) => {
           console.log('🔍 Available windows:', sources.map(s => ({ id: s.id, name: s.name })));
 
-          const target = sources.find(s => s.name && s.name.includes(APP_TITLE)) || sources[0];
+          // Always search for the app window by name — never fall back to
+          // sources[0] (which would grab whatever window is currently focused)
+          const target = sources.find(s => s.name && (
+            s.name.includes('67 editing software') ||
+            s.name.includes(APP_TITLE) ||
+            s.name.includes('67-editing-software')
+          ));
           if (target) {
             console.log('✅ Providing window for capture:', target.id, '| Name:', target.name);
             callback({ video: target });
           } else {
-            console.error('❌ No windows found for capture');
+            console.error('❌ No "67 editing software" window found for capture');
             callback({});
           }
         })
