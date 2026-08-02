@@ -477,14 +477,24 @@ function AppContent() {
   }, []);
 
   // Track mouse position for custom cursor overlay (sent to main process → forwarded to shader_window)
+  // Listen to BOTH mousemove and pointermove — pointermove is needed because
+  // the Splitter component uses pointer events for dragging, and during a
+  // pointer drag the browser can suppress mousemove events.
   useEffect(() => {
     const api = (window as any).electronAPI;
     if (!api?.send) return;
-    const handler = (e: MouseEvent) => {
+    const mouseHandler = (e: MouseEvent) => {
       api.send('cursor-move', { x: e.clientX, y: e.clientY });
     };
-    document.addEventListener('mousemove', handler);
-    return () => document.removeEventListener('mousemove', handler);
+    const pointerHandler = (e: PointerEvent) => {
+      api.send('cursor-move', { x: e.clientX, y: e.clientY });
+    };
+    document.addEventListener('mousemove', mouseHandler);
+    document.addEventListener('pointermove', pointerHandler);
+    return () => {
+      document.removeEventListener('mousemove', mouseHandler);
+      document.removeEventListener('pointermove', pointerHandler);
+    };
   }, []);
 
   // Styles back/close: goes back one level if inside a sub-page, otherwise closes
