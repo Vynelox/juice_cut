@@ -87,6 +87,7 @@ const UNIFORM_NAMES = [
   'u_strength',
   'u_themeColors',
   'u_medianHue',
+  'u_medianSat',
 ] as const;
 
 const CURSOR_UNIFORM_NAMES = [
@@ -95,6 +96,7 @@ const CURSOR_UNIFORM_NAMES = [
   'u_resolution',
   'u_time',
   'u_medianHue',
+  'u_medianSat',
 ] as const;
 
 // ─── ShaderRenderer interface ───────────────────────────────────────────────
@@ -129,6 +131,9 @@ export interface ShaderRenderer {
 
   /** Update the median hue value on the GPU (0.0–1.0) */
   updateMedianHue(hue: number): void;
+
+  /** Update the median saturation value on the GPU (0.0–1.0) */
+  updateMedianSat(sat: number): void;
 
   /**
    * Update the cursor position in normalized coordinates (0.0 – 1.0).
@@ -209,6 +214,9 @@ export function createShaderRenderer(): ShaderRenderer {
 
   // Median hue of the theme colors (0.0–1.0)
   let medianHueValue = 0.0;
+
+  // Median saturation of the theme colors (0.0–1.0)
+  let medianSatValue = 0.0;
 
   const renderer: ShaderRenderer = {
     get program() { return program; },
@@ -299,6 +307,10 @@ export function createShaderRenderer(): ShaderRenderer {
       medianHueValue = hue;
     },
 
+    updateMedianSat(sat: number): void {
+      medianSatValue = sat;
+    },
+
     renderFrame(
       gl: WebGL2RenderingContext,
       frame: VideoFrame,
@@ -353,6 +365,11 @@ export function createShaderRenderer(): ShaderRenderer {
         gl.uniform1f(uniforms.u_medianHue, medianHueValue);
       }
 
+      // Push median saturation to GPU
+      if (uniforms.u_medianSat) {
+        gl.uniform1f(uniforms.u_medianSat, medianSatValue);
+      }
+
       gl.bindVertexArray(vao);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
@@ -379,6 +396,9 @@ export function createShaderRenderer(): ShaderRenderer {
           }
           if (cursorUniforms.u_medianHue) {
             gl.uniform1f(cursorUniforms.u_medianHue, medianHueValue);
+          }
+          if (cursorUniforms.u_medianSat) {
+            gl.uniform1f(cursorUniforms.u_medianSat, medianSatValue);
           }
 
           // Draw: plasma fill (TRIANGLES, 3 vertices = 1 triangle)

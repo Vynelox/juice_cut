@@ -289,27 +289,33 @@ function AppContent() {
         rgbColors.push([r, g, b]);
       });
 
-      // ── Calculate median hue ──────────────────────────────────────────────
-      // Convert each theme color to HSL, extract hue, sort, pick the middle value
-      const rgbToHue = (r: number, g: number, b: number): number => {
+      // ── Calculate median hue and median saturation ────────────────────────
+      // Convert each theme color to HSL, extract hue and saturation, sort, pick middle
+      const rgbToHsl = (r: number, g: number, b: number): [number, number] => {
         const max = Math.max(r, g, b);
         const min = Math.min(r, g, b);
         const d = max - min;
-        if (d === 0) return 0; // achromatic (gray) → hue 0
+        const l = (max + min) / 2;
+        if (d === 0) return [0, 0]; // achromatic (gray) → hue 0, saturation 0
+        const s = d / (1 - Math.abs(2 * l - 1));
         let h = 0;
         if (max === r) h = ((g - b) / d) % 6;
         else if (max === g) h = (b - r) / d + 2;
         else h = (r - g) / d + 4;
         h = h * 60;
         if (h < 0) h += 360;
-        return h;
+        return [h, s];
       };
 
-      const hues = rgbColors.map(([r, g, b]) => rgbToHue(r, g, b)).sort((a, b) => a - b);
+      const hslValues = rgbColors.map(([r, g, b]) => rgbToHsl(r, g, b));
+      const hues = hslValues.map(([h]) => h).sort((a, b) => a - b);
+      const sats = hslValues.map(([, s]) => s).sort((a, b) => a - b);
       const medianHue = hues[Math.floor(hues.length / 2)] / 360.0; // normalize to 0.0–1.0
+      const medianSat = sats[Math.floor(sats.length / 2)]; // already 0.0–1.0
 
-      // Append median hue as a single float at the end of the array (total: 52 floats)
+      // Append median hue and median saturation (total: 53 floats)
       colorArray.push(medianHue);
+      colorArray.push(medianSat);
 
       api.send('update-shader-colors', colorArray);
     };

@@ -28,6 +28,9 @@ uniform vec2 u_resolution;
 // Median hue of the theme colors (0.0–1.0)
 uniform float u_medianHue;
 
+// Median saturation of the theme colors (0.0–1.0)
+uniform float u_medianSat;
+
 // ─── RGB ↔ HSV conversion ────────────────────────────────────────────────────
 vec3 rgb2hsv(vec3 c) {
     vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
@@ -164,10 +167,11 @@ void main() {
     // Apply colormap
     vec4 color = colormap(shade);
 
-    // ── Hue-shift the colormap output to the median theme hue ──────────────
-    // Convert to HSV, replace the hue with the median hue, convert back to RGB
+    // ── Hue-shift and saturation-shift the colormap output to the theme ────
+    // Convert to HSV, replace hue and saturation with median theme values, convert back to RGB
     vec3 hsv = rgb2hsv(color.rgb);
     hsv.x = u_medianHue;
+    hsv.y = u_medianSat;
     color.rgb = hsv2rgb(hsv);
     
     // Calculate distance to triangle edges for border

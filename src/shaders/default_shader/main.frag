@@ -19,6 +19,10 @@ uniform vec3 u_themeColors[17];
 // Calculated by App.tsx: converts all 17 theme colors to HSL, sorts by hue, picks the middle value
 uniform float u_medianHue;
 
+// Median saturation of all theme colors (0.0–1.0)
+// Calculated by App.tsx: converts all 17 theme colors to HSL, sorts by saturation, picks the middle value
+uniform float u_medianSat;
+
 void main(){
   outColor = texture(u_texture, v_texCoord);
 }
