@@ -15,6 +15,10 @@ uniform float u_strength;
 // 14: --playneedle, 15: --highlight-color, 16: --automation-line
 uniform vec3 u_themeColors[17];
 
+// Median hue of all theme colors (0.0–1.0)
+// Calculated by App.tsx: converts all 17 theme colors to HSL, sorts by hue, picks the middle value
+uniform float u_medianHue;
+
 void main(){
   outColor = texture(u_texture, v_texCoord);
 }

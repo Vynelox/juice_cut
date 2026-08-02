@@ -140,14 +140,20 @@ async function main() {
 
     // ── Theme Colors State ─────────────────────────────────────────────────────
     // Default to black, will be overwritten by app window immediately
+    // Array layout: 17 colors × 3 components (51 floats) + 1 median hue float = 52 total
     let currentThemeColors = new Float32Array(17 * 3).fill(0.0);
+    let currentMedianHue = 0.0;
 
     if (api) {
       api.on('shader-colors-update', (colors: number[]) => {
-        if (colors && colors.length === 17 * 3) {
-          currentThemeColors = new Float32Array(colors);
+        if (colors && colors.length === 17 * 3 + 1) {
+          // First 51 floats are the theme colors
+          currentThemeColors = new Float32Array(colors.slice(0, 17 * 3));
+          // Last float is the median hue (0.0–1.0)
+          currentMedianHue = colors[17 * 3];
           // Notify renderer that colors changed (it will pick them up on next renderFrame)
           renderer.updateThemeColors(currentThemeColors);
+          renderer.updateMedianHue(currentMedianHue);
         }
       });
     }

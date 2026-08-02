@@ -281,11 +281,35 @@ function AppContent() {
       };
 
       const colorArray: number[] = [];
+      const rgbColors: [number, number, number][] = [];
       varNames.forEach(varName => {
         const hex = styles.getPropertyValue(varName).trim();
         const [r, g, b] = hex.startsWith('#') ? hexToRgb(hex) : [0, 0, 0];
         colorArray.push(r, g, b);
+        rgbColors.push([r, g, b]);
       });
+
+      // ── Calculate median hue ──────────────────────────────────────────────
+      // Convert each theme color to HSL, extract hue, sort, pick the middle value
+      const rgbToHue = (r: number, g: number, b: number): number => {
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const d = max - min;
+        if (d === 0) return 0; // achromatic (gray) → hue 0
+        let h = 0;
+        if (max === r) h = ((g - b) / d) % 6;
+        else if (max === g) h = (b - r) / d + 2;
+        else h = (r - g) / d + 4;
+        h = h * 60;
+        if (h < 0) h += 360;
+        return h;
+      };
+
+      const hues = rgbColors.map(([r, g, b]) => rgbToHue(r, g, b)).sort((a, b) => a - b);
+      const medianHue = hues[Math.floor(hues.length / 2)] / 360.0; // normalize to 0.0–1.0
+
+      // Append median hue as a single float at the end of the array (total: 52 floats)
+      colorArray.push(medianHue);
 
       api.send('update-shader-colors', colorArray);
     };

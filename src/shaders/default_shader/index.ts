@@ -85,7 +85,8 @@ const UNIFORM_NAMES = [
   'u_resolution',
   'u_time',
   'u_strength',
-  'u_themeColors', // <-- ADD THIS
+  'u_themeColors',
+  'u_medianHue',
 ] as const;
 
 const CURSOR_UNIFORM_NAMES = [
@@ -93,6 +94,7 @@ const CURSOR_UNIFORM_NAMES = [
   'u_cursorSize',
   'u_resolution',
   'u_time',
+  'u_medianHue',
 ] as const;
 
 // ─── ShaderRenderer interface ───────────────────────────────────────────────
@@ -124,6 +126,9 @@ export interface ShaderRenderer {
 
   /** Update the theme color array on the GPU */
   updateThemeColors(colors: Float32Array): void;
+
+  /** Update the median hue value on the GPU (0.0–1.0) */
+  updateMedianHue(hue: number): void;
 
   /**
    * Update the cursor position in normalized coordinates (0.0 – 1.0).
@@ -201,6 +206,9 @@ export function createShaderRenderer(): ShaderRenderer {
 
   // Theme colors array (17 colors × 3 components = 51 floats)
   let themeColorsArray: Float32Array | null = null;
+
+  // Median hue of the theme colors (0.0–1.0)
+  let medianHueValue = 0.0;
 
   const renderer: ShaderRenderer = {
     get program() { return program; },
@@ -287,6 +295,10 @@ export function createShaderRenderer(): ShaderRenderer {
       themeColorsArray = colors;
     },
 
+    updateMedianHue(hue: number): void {
+      medianHueValue = hue;
+    },
+
     renderFrame(
       gl: WebGL2RenderingContext,
       frame: VideoFrame,
@@ -336,6 +348,11 @@ export function createShaderRenderer(): ShaderRenderer {
         gl.uniform3fv(uniforms.u_themeColors, colorsToUse);
       }
 
+      // Push median hue to GPU
+      if (uniforms.u_medianHue) {
+        gl.uniform1f(uniforms.u_medianHue, medianHueValue);
+      }
+
       gl.bindVertexArray(vao);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
@@ -359,6 +376,9 @@ export function createShaderRenderer(): ShaderRenderer {
           }
           if (cursorUniforms.u_time) {
             gl.uniform1f(cursorUniforms.u_time, time);
+          }
+          if (cursorUniforms.u_medianHue) {
+            gl.uniform1f(cursorUniforms.u_medianHue, medianHueValue);
           }
 
           // Draw: plasma fill (TRIANGLES, 3 vertices = 1 triangle)
