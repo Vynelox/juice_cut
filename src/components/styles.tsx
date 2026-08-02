@@ -92,6 +92,8 @@ function getThemeColors(themeName: string): ThemeColors {
 export function applyThemeToDocument(themeName: string) {
   const themeColors = getThemeColors(themeName);
   colorFields.forEach(c => { document.documentElement.style.setProperty(c.varName, themeColors[c.varName]); });
+  // Dispatch event so App.tsx can re-send updated colors to the shader window
+  window.dispatchEvent(new CustomEvent('juicecut.theme-changed', { detail: { themeName } }));
 }
 
 export function StylesContent({ themeName, setShowStyle, setStylePage }: {
@@ -119,12 +121,16 @@ export function StylesContent({ themeName, setShowStyle, setStylePage }: {
   function updateColor(varName: string, hex: string) {
     document.documentElement.style.setProperty(varName, hex);
     setColors(prev => ({ ...prev, [varName]: hex }));
+    // Dispatch event so App.tsx can re-send updated colors to the shader window
+    window.dispatchEvent(new CustomEvent('juicecut.theme-changed', { detail: { varName, hex } }));
   }
 
   function resetColor(varName: ColorVarName) {
     const defaultColor = getThemeColors(themeName)[varName];
     document.documentElement.style.setProperty(varName, defaultColor);
     setColors(prev => ({ ...prev, [varName]: defaultColor }));
+    // Dispatch event so App.tsx can re-send updated colors to the shader window
+    window.dispatchEvent(new CustomEvent('juicecut.theme-changed', { detail: { varName, hex: defaultColor } }));
   }
 
   function handleColorClick(varName: string, currentValue: string) {
