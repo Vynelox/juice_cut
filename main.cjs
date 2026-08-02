@@ -337,6 +337,13 @@ class WindowManager {
       }
     });
 
+    // Forward theme colors from app_window to shader_window for dynamic effects and UI masking
+    ipcMain.on('update-shader-colors', (_event, colorArray) => {
+      if (this.shaderWindow && !this.shaderWindow.isDestroyed()) {
+        this.shaderWindow.webContents.send('shader-colors-update', colorArray);
+      }
+    });
+
     // Fallback: get-window-source-id for non-shader mode
     ipcMain.handle('get-window-source-id', () => {
       if (this.appWindow && this.appWindow.webContents) {

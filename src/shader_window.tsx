@@ -138,6 +138,20 @@ async function main() {
       console.log('Custom cursor: listening for mouse position');
     }
 
+    // ── Theme Colors State ─────────────────────────────────────────────────────
+    // Default to black, will be overwritten by app window immediately
+    let currentThemeColors = new Float32Array(17 * 3).fill(0.0);
+
+    if (api) {
+      api.on('shader-colors-update', (colors: number[]) => {
+        if (colors && colors.length === 17 * 3) {
+          currentThemeColors = new Float32Array(colors);
+          // Notify renderer that colors changed (it will pick them up on next renderFrame)
+          renderer.updateThemeColors(currentThemeColors);
+        }
+      });
+    }
+
 
     // 🖥️📺 Detect monitor refresh rate by measuring requestAnimationFrame timing
     const detectRefreshRate = (): Promise<number> => {
@@ -254,7 +268,8 @@ async function main() {
       // 🔥 ONLY DRAW AND COUNT IF WE HAVE A FRAME
       if (latestFrame) {
         const time = now / 1000.0;
-        renderer.renderFrame(gl!, latestFrame, time, 1.0);
+        // Pass the currentThemeColors to the render function
+        renderer.renderFrame(gl!, latestFrame, time, 1.0, currentThemeColors);
         
         // Increment counter ONLY when a frame is actually rendered to the screen
         frameCount++; 

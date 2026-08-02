@@ -85,6 +85,7 @@ const UNIFORM_NAMES = [
   'u_resolution',
   'u_time',
   'u_strength',
+  'u_themeColors', // <-- ADD THIS
 ] as const;
 
 const CURSOR_UNIFORM_NAMES = [
@@ -118,7 +119,11 @@ export interface ShaderRenderer {
     frame: VideoFrame,
     time: number,
     strength: number,
+    themeColors?: Float32Array, // <-- ADD THIS
   ): void;
+
+  /** Update the theme color array on the GPU */
+  updateThemeColors(colors: Float32Array): void;
 
   /**
    * Update the cursor position in normalized coordinates (0.0 – 1.0).
@@ -193,6 +198,9 @@ export function createShaderRenderer(): ShaderRenderer {
   // Track texture dimensions for re-allocation
   let textureWidth = 1;
   let textureHeight = 1;
+
+  // Theme colors array (17 colors × 3 components = 51 floats)
+  let themeColorsArray: Float32Array | null = null;
 
   const renderer: ShaderRenderer = {
     get program() { return program; },
@@ -275,11 +283,16 @@ export function createShaderRenderer(): ShaderRenderer {
       }
     },
 
+    updateThemeColors(colors: Float32Array): void {
+      themeColorsArray = colors;
+    },
+
     renderFrame(
       gl: WebGL2RenderingContext,
       frame: VideoFrame,
       time: number,
       strength: number,
+      themeColors?: Float32Array,
     ): void {
       // ── Pass 1: Render the captured frame ───────────────────────────────
       // Re-allocate texture if frame size changed
@@ -316,6 +329,12 @@ export function createShaderRenderer(): ShaderRenderer {
       if (uniforms.u_texture) gl.uniform1i(uniforms.u_texture, 0);
       if (uniforms.u_time) gl.uniform1f(uniforms.u_time, time);
       if (uniforms.u_strength) gl.uniform1f(uniforms.u_strength, strength);
+
+      // Push theme colors to GPU if available
+      const colorsToUse = themeColors ?? themeColorsArray;
+      if (uniforms.u_themeColors && colorsToUse) {
+        gl.uniform3fv(uniforms.u_themeColors, colorsToUse);
+      }
 
       gl.bindVertexArray(vao);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);

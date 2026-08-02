@@ -257,6 +257,57 @@ function AppContent() {
     } catch {}
   }, []);
 
+  // Send theme colors to shader window for dynamic effects and UI masking
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!api?.send) return;
+
+    const sendThemeColorsToShader = () => {
+      const styles = getComputedStyle(document.documentElement);
+      // Must match the exact order of colorFields in GlobalStyleSettings.tsx
+      const varNames = [
+        '--bg-panel', '--bg-base', '--bg-viewer', '--video-bg', '--bg-elevated',
+        '--bg-hover', '--border', '--border-mid', '--splitter', '--text-primary',
+        '--text-secondary', '--text-muted', '--input-field', '--input-field-bg',
+        '--playneedle', '--highlight-color', '--automation-line'
+      ];
+
+      const hexToRgb = (hex: string): [number, number, number] => {
+        const clean = hex.replace('#', '');
+        const r = parseInt(clean.substring(0, 2), 16) / 255;
+        const g = parseInt(clean.substring(2, 4), 16) / 255;
+        const b = parseInt(clean.substring(4, 6), 16) / 255;
+        return [r, g, b];
+      };
+
+      const colorArray: number[] = [];
+      varNames.forEach(varName => {
+        const hex = styles.getPropertyValue(varName).trim();
+        const [r, g, b] = hex.startsWith('#') ? hexToRgb(hex) : [0, 0, 0];
+        colorArray.push(r, g, b);
+      });
+
+      api.send('update-shader-colors', colorArray);
+    };
+
+    // Send on mount
+    sendThemeColorsToShader();
+
+    // Listen for theme/color changes
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      // Trigger update on any style change
+      setTimeout(sendThemeColorsToShader, 50);
+    };
+    window.addEventListener('juicecut.settings-changed', handler);
+    window.addEventListener('juicecut.theme-changed', handler);
+
+    return () => {
+      window.removeEventListener('juicecut.settings-changed', handler);
+      window.removeEventListener('juicecut.theme-changed', handler);
+    };
+  }, []);
+
   // Apply saved elevatedPanelDarkenAmount on mount
   useEffect(() => {
     try {
