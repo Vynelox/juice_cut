@@ -49,6 +49,14 @@ function getSavedDelay(): number {
   return 0;
 }
 
+function getSavedHoverScale(): number {
+  try {
+    const v = window.localStorage.getItem('juicecut.settings.torusHoverScale');
+    if (v !== null) { const n = parseFloat(v); if (!isNaN(n) && n >= 1 && n <= 1.5) return n; }
+  } catch {}
+  return 1.08;
+}
+
 // Logarithmic mapping for delay slider: slider 0..1000 → delay -1000..1000
 // Slider 0 = -1000ms, slider 500 = 0ms, slider 1000 = 1000ms
 // Both halves use log scale for magnitude
@@ -120,6 +128,7 @@ export default function TorusMenuEditorModal({ onClose, onBack }: TorusMenuEdito
   const [sizeGraph, setSizeGraph] = useState<SizeGraphPoint[]>(getSavedSizeGraph);
   const [segmentHandleValues, setSegmentHandleValues] = useState<number[]>(getSavedSegmentHandleValues);
   const [delay, setDelay] = useState(getSavedDelay);
+  const [hoverScale, setHoverScale] = useState(getSavedHoverScale);
 
   const sortedSizeGraph = useMemo(() => sizeGraph.slice().sort((a, b) => a.time - b.time), [sizeGraph]);
 
@@ -138,6 +147,10 @@ export default function TorusMenuEditorModal({ onClose, onBack }: TorusMenuEdito
   useEffect(() => {
     try { window.localStorage.setItem('juicecut.settings.torusDelay', String(delay)); } catch {}
   }, [delay]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem('juicecut.settings.torusHoverScale', String(hoverScale)); } catch {}
+  }, [hoverScale]);
 
   const handleCloseTorus = useCallback(() => {
     setTorusOpen(false);
@@ -225,6 +238,29 @@ export default function TorusMenuEditorModal({ onClose, onBack }: TorusMenuEdito
                   <span>1000ms</span>
                 </div>
               </div>
+              <div className="settings-field" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <span style={{ flex: 1, lineHeight: 1.2 }}>Hover Scale</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: 12, whiteSpace: 'nowrap' }}>{hoverScale.toFixed(2)}x</span>
+                    <button type="button" className="icon-btn" onClick={() => setHoverScale(1.08)} title="Reset to default" style={{ padding: 4 }}><RotateCcw size={14} /></button>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  className="settings-range-input"
+                  min={100}
+                  max={150}
+                  step={1}
+                  value={Math.round(hoverScale * 100)}
+                  onChange={e => setHoverScale(Number(e.target.value) / 100)}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)' }}>
+                  <span>1.00x</span>
+                  <span style={{ color: 'var(--text-muted)' }}>1.08x</span>
+                  <span>1.50x</span>
+                </div>
+              </div>
             </div>
 
             <div
@@ -269,6 +305,7 @@ export default function TorusMenuEditorModal({ onClose, onBack }: TorusMenuEdito
                       sizeGraph={sortedSizeGraph}
                       segmentHandleValues={segmentHandleValues}
                       delay={delay}
+                      hoverScale={hoverScale}
                       closeOnBackgroundClick={false}
                     />
                   </div>

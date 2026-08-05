@@ -43,6 +43,14 @@ function getSavedPnWidth(): number {
   return 260;
 }
 
+function getSavedHoverScale(): number {
+  try {
+    const v = window.localStorage.getItem('juicecut.settings.torusHoverScale');
+    if (v !== null) { const n = parseFloat(v); if (!isNaN(n) && n >= 1 && n <= 1.5) return n; }
+  } catch {}
+  return 1.08;
+}
+
 function frameToX(frame: number, zoom: number) { return frame * PX_PER_FRAME * zoom; }
 function xToFrame(x: number, zoom: number) { return Math.round(x / (PX_PER_FRAME * zoom)); }
 
@@ -775,6 +783,7 @@ export default function Timeline({
           onStep={(dir, ripple) => { onStepEdge(torusTarget.kind === 'edge' ? torusTarget.clipId : null, torusTarget.kind === 'cut' ? [torusTarget.clipAId, torusTarget.clipBId] : null, dir, ripple); setTorusTarget(null); setTorusPos(null); }}
           onRoll={() => { if (torusTarget.kind === 'inside') onRoll(torusTarget.clipId); setTorusTarget(null); setTorusPos(null); }}
           disableScrolling={getTorusScrollingDisabled()}
+          hoverScale={getSavedHoverScale()}
         />
       )}
     </div>

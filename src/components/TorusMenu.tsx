@@ -7,6 +7,17 @@ import { Scissors, ChevronLeft, ChevronRight, Move } from 'lucide-react';
 import { getSavedSizeGraph, SizeGraphPoint } from './graph';
 import { evaluateGraphWithHandles, getSavedSegmentHandleValues } from '../utils/torusGraphEasing';
 
+function getSavedHoverScale(): number {
+  try {
+    const v = window.localStorage.getItem('juicecut.settings.torusHoverScale');
+    if (v !== null) {
+      const n = parseFloat(v);
+      if (!isNaN(n) && n >= 1 && n <= 1.5) return n;
+    }
+  } catch {}
+  return 1.08;
+}
+
 type TorusTarget =
   | { kind: 'inside'; clipId: string; frame: number }
   | { kind: 'edge'; clipId: string; side: 'start' | 'end'; frame: number }
@@ -52,6 +63,9 @@ interface Props {
 
   // Shared
   closeOnBackgroundClick?: boolean;
+
+  // Hover animation
+  hoverScale?: number;
 
   // Scroll disabling
   disableScrolling?: 'whole torus menu' | 'annular sectors only' | 'none';
@@ -128,13 +142,14 @@ export default function TorusMenu({
   sizeGraph: sizeGraphProp,
   segmentHandleValues: segmentHandleValuesProp,
   items: propItems,
-  cx: propCx,
-  cy: propCy,
+  cx: propCx_temp,
+  cy: propCy_temp,
   innerR: propInnerR,
   outerR: propOuterR,
   rotationOffset: propRotationOffset,
   onSectorClick,
   closeOnBackgroundClick = true,
+  hoverScale: hoverScaleProp,
   disableScrolling = 'none',
 }: Props) {
   const duration = durationProp ?? getSavedDuration();
@@ -150,11 +165,28 @@ export default function TorusMenu({
   const sizeGraph = sizeGraphProp ?? stableSizeGraph;
   const segmentHandleValues = segmentHandleValuesProp ?? stableSegmentHandles;
 
-  const cx = propCx ?? 120;
-  const cy = propCy ?? 120;
+  const propCx = propCx_temp ?? 120;
+  const propCy = propCy_temp ?? 120;
   const innerR = propInnerR ?? 52;
   const outerR = propOuterR ?? 100;
+
+
+  // 🔥 FIX: Calculate the absolute maximum radius to prevent clipping
+  const maxPossibleScale = 1.5; // Matches the max value of the hover scale slider
+  const maxPossibleR = outerR * maxPossibleScale;
+  
+  // The center must be far enough from the edge to accommodate the max radius
+  const center = Math.max(propCx, maxPossibleR);
+  
+  // Override cx and cy to be the true center of the new, larger container
+  const cx = center;
+  const cy = center;
+  const containerSize = center * 2;
+  
+
   const rotationOffset = propRotationOffset ?? (-Math.PI / 6);
+  const hoverScale = hoverScaleProp ?? getSavedHoverScale();
+  const maxOuterR = outerR * hoverScale; 
 
   const isEdgeOrCut = interactive && target ? (target.kind === 'edge' || target.kind === 'cut') : false;
 
@@ -189,6 +221,11 @@ export default function TorusMenu({
   
   // Track if the entrance animation has already played (persists across component instances)
   const hasAnimatedRef = useRef(torusMenuHasAnimated);
+
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  // When a sector is hovered, it scales by hoverScale. Grow the circular hitbox
+  // to match so the enlarged sector isn't clipped by the overlay boundary.
 
   useEffect(() => {
     // Allow the very first render to have the animation style.
@@ -362,30 +399,19 @@ export default function TorusMenu({
   };
 
   const getSectorStyle = (index: number): React.CSSProperties => {
+    const isHovered = hoveredIndex === index;
+    const scale = isHovered ? hoverScale : 1;
+    const fill = isHovered ? 'var(--hover-background, var(--input-field-bg))' : 'var(--input-field-bg)';
     
-    //console.log('🔥GETSECTORSTYLE is running for index:', index);
-
-    const sectorDelay = getSectorDelay(index);
     return {
       cursor: 'pointer',
-      //animation: `torus-sector-pop ${durationSec}s ${getEasing()} ${sectorDelay.toFixed(3)}s`,
-      animationFillMode: 'both',
+      animation: 'none !important',
+      transition: 'transform 0.15s ease-out, fill 0.15s ease-out',
       transformOrigin: `${cx}px ${cy}px`,
       transformBox: 'view-box',
-      animation: 'none !important',
-      transition: 'none !important',
+      transform: `scale(${scale})`,
+      fill,
     };
-
-    // Use the module-level singleton directly to prevent animation replay on remounts.
-    // This ensures the entrance animation only plays once per app session.
-    if (torusMenuHasAnimated) {
-      return { 
-        cursor: 'pointer',
-        opacity: 1 
-      };
-    }
-
-    
   };
 
   const getGroupStyle = (): React.CSSProperties | undefined => {
@@ -463,7 +489,7 @@ export default function TorusMenu({
     <svg width={cx * 2} height={cy * 2} viewBox={`0 0 ${cx * 2} ${cy * 2}`}>
       <defs>
         <clipPath id="torus-clip">
-          <circle cx={cx} cy={cy} r={outerR} />
+          <circle cx={cx} cy={cy} r={maxPossibleR} />
         </clipPath>
       </defs>
       <g clipPath="url(#torus-clip)">
@@ -497,6 +523,8 @@ export default function TorusMenu({
             key={i}
             ref={el => { sectorGroupRefs.current[i] = el; }}
             style={getGroupStyle()}
+            onMouseEnter={() => setHoveredIndex(i)}
+            onMouseLeave={() => setHoveredIndex(null)}
           >
             <path
               d={annularSectorPath(cx, cy, innerR, outerR, startAngle, endAngle)}
@@ -561,7 +589,7 @@ return (
         <div
           className={`torus-overlay${disableScrolling === 'none' ? ' torus-overlay--no-scroll' : ''}`}
           ref={ref}
-          style={{ left: pos.x - cx, top: pos.y - cy, width: cx * 2, height: cy * 2, transformOrigin: `${cx}px ${cy}px`, transformBox: 'view-box', borderRadius: '50%', overflow: 'hidden', clipPath: `circle(${outerR}px at ${cx}px ${cy}px)` }}
+          style={{ left: pos.x - cx, top: pos.y - cy, width: cx * 2, height: cy * 2, transformOrigin: `${cx}px ${cy}px`, transformBox: 'view-box', borderRadius: '50%', overflow: 'hidden', clipPath: `circle(${maxPossibleR}px at ${cx}px ${cy}px)` }}
           onMouseDown={(e) => {
             const targetEl = e.target as HTMLElement;
             if (disableScrolling !== 'annular sectors only' || targetEl.closest('.torus-sector')) {
