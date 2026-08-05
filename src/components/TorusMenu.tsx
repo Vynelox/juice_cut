@@ -186,7 +186,11 @@ export default function TorusMenu({
 
   const rotationOffset = propRotationOffset ?? (-Math.PI / 6);
   const hoverScale = hoverScaleProp ?? getSavedHoverScale();
-  const maxOuterR = outerR * hoverScale; 
+  const maxOuterR = outerR * hoverScale;
+    // 🔥 FIX: Calculate the outer radius based on hover state
+  const getOuterR = (index: number) => {
+    return hoveredIndex === index ? outerR * hoverScale : outerR;
+  };
 
   const isEdgeOrCut = interactive && target ? (target.kind === 'edge' || target.kind === 'cut') : false;
 
@@ -427,10 +431,7 @@ export default function TorusMenu({
     return {
       cursor: 'pointer',
       animation: 'none !important',
-      transition: 'transform 0.15s ease-out, fill 0.15s ease-out',
-      transformOrigin: `${cx}px ${cy}px`,
-      transformBox: 'view-box',
-      transform: `scale(${scale})`,
+      transition: '0.15s ease-out',
       fill,
     };
   };
@@ -535,7 +536,10 @@ export default function TorusMenu({
         const startAngle = i * sectorAngle - Math.PI / 2 + rotationOffset;
         const endAngle = (i + 1) * sectorAngle - Math.PI / 2 + rotationOffset;
         const midAngle = (startAngle + endAngle) / 2;
-        const labelR = (innerR + outerR) / 2;
+
+        // 🔥 FIX: Calculate dynamic outer radius for this sector
+        const dynamicOuterR = getOuterR(i);
+        const labelR = (innerR + dynamicOuterR) / 2;
         const labelX = cx + labelR * Math.cos(midAngle);
         const labelY = cy + labelR * Math.sin(midAngle);
 
@@ -548,7 +552,7 @@ export default function TorusMenu({
             onMouseLeave={() => setHoveredIndex(null)}
           >
             <path
-              d={annularSectorPath(cx, cy, innerR, outerR, startAngle, endAngle)}
+              d={annularSectorPath(cx, cy, innerR, dynamicOuterR, startAngle, endAngle)}
               fill="var(--input-field-bg)"
               stroke="var(--border-mid)"
               strokeWidth={0.5}
