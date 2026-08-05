@@ -1,3 +1,4 @@
+//torusGraphEasing.ts
 import type { SizeGraphPoint } from '../components/graph';
 
 const STRENGTH = 3;

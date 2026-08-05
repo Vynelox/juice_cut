@@ -1,4 +1,8 @@
-import { useEffect, useRef, ReactNode } from 'react';
+// Module-level singleton that persists across TorusMenu instances.
+// Prevents entrance animation from replaying when component remounts.
+let torusMenuHasAnimated = false;
+
+import { useEffect, useState, useRef, ReactNode } from 'react';
 import { Scissors, ChevronLeft, ChevronRight, Move } from 'lucide-react';
 import { getSavedSizeGraph, SizeGraphPoint } from './graph';
 import { evaluateGraphWithHandles, getSavedSegmentHandleValues } from '../utils/torusGraphEasing';
@@ -136,8 +140,15 @@ export default function TorusMenu({
   const duration = durationProp ?? getSavedDuration();
   const easing = easingProp ?? getSavedEasing();
   const delay = delayProp ?? getSavedDelay();
-  const sizeGraph = sizeGraphProp ?? getSavedSizeGraph();
-  const segmentHandleValues = segmentHandleValuesProp ?? getSavedSegmentHandleValues();
+
+  // 🔥 FIX: Use useState to calculate these EXACTLY ONCE per menu mount.
+  // This prevents JSON.parse from creating new array references on every render,
+  // which stops the useEffect from re-triggering and resetting the animation.
+  const [stableSizeGraph] = useState(() => sizeGraphProp ?? getSavedSizeGraph());
+  const [stableSegmentHandles] = useState(() => segmentHandleValuesProp ?? getSavedSegmentHandleValues());
+
+  const sizeGraph = sizeGraphProp ?? stableSizeGraph;
+  const segmentHandleValues = segmentHandleValuesProp ?? stableSegmentHandles;
 
   const cx = propCx ?? 120;
   const cy = propCy ?? 120;
@@ -168,11 +179,44 @@ export default function TorusMenu({
     : [];
 
   const items = isEdgeOrCut ? edgeItems : insideItems;
-  const sectorAngle = (Math.PI * 2) / items.length;
+  const MAX_SECTORS = 6;
+  const sectorAngle = (Math.PI * 2) / MAX_SECTORS;
+  const visibleCount = items.length;
 
   // Interactive-only: scroll-to-close and background-click-to-close
   const ref = useRef<HTMLDivElement>(null);
   const sectorGroupRefs = useRef<(SVGGElement | null)[]>([]);
+  
+  // Track if the entrance animation has already played (persists across component instances)
+  const hasAnimatedRef = useRef(torusMenuHasAnimated);
+
+  useEffect(() => {
+    // Allow the very first render to have the animation style.
+    // After one frame, lock it so subsequent re-renders/remounts 
+    // won't trigger the animation again.
+    const rafId = requestAnimationFrame(() => {
+      torusMenuHasAnimated = true;
+      hasAnimatedRef.current = true;
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+
+  // Remove animation styles from sectors after entrance completes.
+  // This prevents CSS animation replay on re-mounts even if DOM nodes are recreated.
+  useEffect(() => {
+    if (!hasAnimatedRef.current) return;
+    const timer = setTimeout(() => {
+      sectorGroupRefs.current.forEach(group => {
+        if (group) {
+          group.style.animation = 'none';
+          group.style.opacity = '1';
+          group.style.transform = 'scale(1)';
+        }
+      });
+    }, duration + delay + 100);
+    return () => clearTimeout(timer);
+  }, [duration, delay]);
+
   useEffect(() => {
     if (!interactive) return;
     const timer = setTimeout(() => {
@@ -318,17 +362,30 @@ export default function TorusMenu({
   };
 
   const getSectorStyle = (index: number): React.CSSProperties => {
-    if (hasSizeGraph) {
-      return { cursor: 'pointer' };
-    }
+    
+    //console.log('🔥GETSECTORSTYLE is running for index:', index);
+
     const sectorDelay = getSectorDelay(index);
     return {
       cursor: 'pointer',
-      animation: `torus-sector-pop ${durationSec}s ${getEasing()} ${sectorDelay.toFixed(3)}s`,
+      //animation: `torus-sector-pop ${durationSec}s ${getEasing()} ${sectorDelay.toFixed(3)}s`,
       animationFillMode: 'both',
       transformOrigin: `${cx}px ${cy}px`,
       transformBox: 'view-box',
+      animation: 'none !important',
+      transition: 'none !important',
     };
+
+    // Use the module-level singleton directly to prevent animation replay on remounts.
+    // This ensures the entrance animation only plays once per app session.
+    if (torusMenuHasAnimated) {
+      return { 
+        cursor: 'pointer',
+        opacity: 1 
+      };
+    }
+
+    
   };
 
   const getGroupStyle = (): React.CSSProperties | undefined => {
@@ -337,8 +394,8 @@ export default function TorusMenu({
     return {
       transformOrigin: `${cx}px ${cy}px`,
       transformBox: 'view-box',
-      opacity: 0,
-      transform: `scale(${initialSize})`,
+      //opacity: 0,
+      //transform: `scale(${initialSize})`,
     };
   };
 
@@ -387,16 +444,11 @@ export default function TorusMenu({
       }
     };
 
-    sectorGroupRefs.current.forEach(group => {
-      if (group) {
-        group.style.opacity = '0';
-        group.style.transform = `scale(${initialSize})`;
-      }
-    });
+    
 
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [hasSizeGraph, sizeGraph, segmentHandleValues, duration, delay, items.length, cx, cy]);
+  }, [hasSizeGraph, sizeGraph, segmentHandleValues, duration, delay, cx, cy]);
 
   const handleSectorClick = (item: MenuItem) => {
     if (interactive) {
@@ -415,7 +467,24 @@ export default function TorusMenu({
         </clipPath>
       </defs>
       <g clipPath="url(#torus-clip)">
-      {items.map((item, i) => {
+      {Array.from({ length: MAX_SECTORS }).map((_, i) => {
+        if (i >= visibleCount) {
+          return (
+            <g
+              key={i}
+              ref={el => { sectorGroupRefs.current[i] = el; }}
+              style={{ opacity: 0, pointerEvents: 'none' }}
+            >
+              <path
+                d={annularSectorPath(cx, cy, innerR, outerR, 0, 0)}
+                fill="none"
+                stroke="none"
+              />
+            </g>
+          );
+        }
+
+        const item = items[i];
         const startAngle = i * sectorAngle - Math.PI / 2 + rotationOffset;
         const endAngle = (i + 1) * sectorAngle - Math.PI / 2 + rotationOffset;
         const midAngle = (startAngle + endAngle) / 2;
@@ -425,7 +494,7 @@ export default function TorusMenu({
 
         return (
           <g
-            key={item.label}
+            key={i}
             ref={el => { sectorGroupRefs.current[i] = el; }}
             style={getGroupStyle()}
           >
@@ -546,3 +615,4 @@ export const insideMenuItems: MenuItem[] = [
   { label: 'Ripple', icon: <ChevronLeft size={14} />, action: () => {}, color: '#fbbf24' },
   { label: 'Roll', icon: <Move size={14} />, action: () => {}, color: '#f472b6' },
 ];
+

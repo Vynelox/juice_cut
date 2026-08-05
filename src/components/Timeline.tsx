@@ -1,3 +1,4 @@
+//timeline.tsx
 import { useRef, useState, useCallback, useEffect, useLayoutEffect } from 'react';
 import { Film, Music } from 'lucide-react';
 import type { TimelineClip, Track, MediaItem } from '../types';

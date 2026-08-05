@@ -1,3 +1,4 @@
+//settings.tsx
 import { useEffect, useState, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RotateCcw, Plus, ChevronRight } from 'lucide-react';

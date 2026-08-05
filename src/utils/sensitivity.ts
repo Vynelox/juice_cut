@@ -2,7 +2,7 @@
  * Drag sensitivity utility for controlling mouse drag speed
  * Sensitivity is measured in pixels per pixel (ppp)
  */
-
+//sensitivity.ts
 export interface SensitivityState {
   /** Current sensitivity value in ppp */
   sensitivity: number;
