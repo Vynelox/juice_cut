@@ -309,7 +309,7 @@ export default function TorusMenu({
       };
       window.addEventListener('scroll', scrollHandler, true);
 
-      let clickHandler: ((e: MouseEvent) => void) | null = null;
+            let clickHandler: ((e: MouseEvent) => void) | null = null;
       let pointerDownHandler: ((e: PointerEvent) => void) | null = null;
       if (closeOnBackgroundClick) {
         clickHandler = (e: MouseEvent) => {
@@ -318,21 +318,32 @@ export default function TorusMenu({
           if (target.closest('.torus-center-btn')) return;
           
           if (disableScrolling === 'annular sectors only') {
-            // Close if not clicking on a sector (allow clicking center/outside to close)
             if (!target.closest('.torus-sector')) {
               onClose();
             }
             return;
           }
           
-          if (ref.current && !ref.current.contains(target)) {
-            onClose();
+          // 🔥 FIX: Check if click is inside the circular hitbox (radius = outerR)
+          // Calculate distance from click to menu center
+          const rect = ref.current?.getBoundingClientRect();
+          if (rect) {
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            const centerX = cx;
+            const centerY = cy;
+            const distance = Math.sqrt(Math.pow(clickX - centerX, 2) + Math.pow(clickY - centerY, 2));
+            
+            // If click is outside the circular hitbox, close the menu
+            if (distance > outerR) {
+              onClose();
+            }
           }
         };
         window.addEventListener('mousedown', clickHandler);
 
         // Also handle pointerdown for splitters and other pointer-based interactions
-        pointerDownHandler = (e: PointerEvent) => {
+                pointerDownHandler = (e: PointerEvent) => {
           const target = e.target as HTMLElement;
           if (target.closest('.torus-toggle-btn')) return;
           if (target.closest('.torus-center-btn')) return;
@@ -344,8 +355,18 @@ export default function TorusMenu({
             return;
           }
           
-          if (ref.current && !ref.current.contains(target)) {
-            onClose();
+          // 🔥 FIX: Same circular hitbox check
+          const rect = ref.current?.getBoundingClientRect();
+          if (rect) {
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            const centerX = cx;
+            const centerY = cy;
+            const distance = Math.sqrt(Math.pow(clickX - centerX, 2) + Math.pow(clickY - centerY, 2));
+            
+            if (distance > outerR) {
+              onClose();
+            }
           }
         };
         window.addEventListener('pointerdown', pointerDownHandler);
@@ -589,7 +610,22 @@ return (
         <div
           className={`torus-overlay${disableScrolling === 'none' ? ' torus-overlay--no-scroll' : ''}`}
           ref={ref}
-          style={{ left: pos.x - cx, top: pos.y - cy, width: cx * 2, height: cy * 2, transformOrigin: `${cx}px ${cy}px`, transformBox: 'view-box', borderRadius: '50%', overflow: 'hidden', clipPath: `circle(${maxPossibleR}px at ${cx}px ${cy}px)` }}
+          style={{
+            left: pos.x - cx,
+            top: pos.y - cy,
+            width: cx * 2,
+            height: cy * 2,
+            transformOrigin: `${cx}px ${cy}px`,
+            transformBox: 'view-box',
+            // 🔥 FIX: Remove borderRadius - clipPath handles the shape and makes it circular already
+            // borderRadius: '50%', 
+
+            // 🔥 FIX: Remove overflow: hidden so the visual can render beyond the hitbox
+            // overflow: 'hidden',
+            // 🔥 FIX: Use outerR for the hitbox (skintight), not maxPossibleR
+            //🔥 in fact just remove clipPath entirely
+            //clipPath: `circle(${outerR}px at ${cx}px ${cy}px)`
+          }}
           onMouseDown={(e) => {
             const targetEl = e.target as HTMLElement;
             if (disableScrolling !== 'annular sectors only' || targetEl.closest('.torus-sector')) {
