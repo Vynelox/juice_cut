@@ -292,16 +292,6 @@ export default function Timeline({
     return ticks;
   };
 
-  // Close torus menu when splitters are interacted with
-  useEffect(() => {
-    const handler = () => {
-      setTorusTarget(null);
-      setTorusPos(null);
-    };
-    window.addEventListener('juicecut-torus-close', handler);
-    return () => window.removeEventListener('juicecut-torus-close', handler);
-  }, []);
-
   const getPlayheadContext = useCallback((): TorusTarget => {
     for (const clip of clips) {
       if (Math.abs(playhead - clip.startFrame) <= 1) {
@@ -350,6 +340,42 @@ export default function Timeline({
     } else {
       setTorusPos({ x: e.clientX, y: e.clientY });
     }
+  }, [getPlayheadContext, playheadX, playneedleParams]);
+
+  // Toggle torus menu open/closed when the shortcut is pressed
+  const torusTargetRef = useRef(torusTarget);
+  torusTargetRef.current = torusTarget;
+
+  useEffect(() => {
+    const handler = () => {
+      if (torusTargetRef.current) {
+        // Already open → close it
+        setTorusTarget(null);
+        setTorusPos(null);
+      } else {
+        // Closed → open it at the playhead context
+        const target = getPlayheadContext();
+        setTorusTarget(target);
+
+        // Position the menu at the playneedle button center (same as handleNeedleClick)
+        const el = containerRef.current;
+        if (el) {
+          const scrollEl = el.querySelector('.tl-scroll') as HTMLElement | null;
+          const scrollRect = scrollEl?.getBoundingClientRect();
+          const scrollLeft = scrollEl?.scrollLeft ?? 0;
+          const phHeight = scrollEl?.clientHeight ?? 200;
+          const btnCenterX = (scrollRect?.left ?? 0) + playheadX - scrollLeft;
+          const { v_o, s } = playneedleParams;
+          const buttonCenterFraction = v_o * (1 - Math.PI / s) + Math.PI / (2 * s);
+          const btnCenterY = (scrollRect?.top ?? 0) + buttonCenterFraction * phHeight;
+          setTorusPos({ x: btnCenterX, y: btnCenterY });
+        } else {
+          setTorusPos({ x: 400, y: 300 });
+        }
+      }
+    };
+    window.addEventListener('juicecut-torus-toggle', handler);
+    return () => window.removeEventListener('juicecut-torus-toggle', handler);
   }, [getPlayheadContext, playheadX, playneedleParams]);
 
   const getJoinPairs = useCallback(() => {

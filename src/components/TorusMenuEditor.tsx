@@ -9,7 +9,7 @@ import { modalManager } from '../state/modalManager';
 import TorusMenu from './TorusMenu';
 import { Slider } from './Adjustables';
 import { RotateCcw, Plus } from 'lucide-react';
-import { isShortcutMatch, getShortcutKeys as scGetKeys, updateShortcuts as scUpdate, resetDefaultShortcuts as scReset, type ShortcutAction } from './shortcuts';
+import { isShortcutMatch, getShortcutKeys as scGetKeys, updateShortcuts as scUpdate, resetDefaultShortcuts as scReset, type ShortcutAction, SHORTCUT_LABELS } from './shortcuts';
 
 // Torus Menu Editor modal dimensions
 const EDITOR_WIDTH = 620; //default 620px, can be wider if needed
@@ -124,19 +124,27 @@ export interface TorusMenuEditorModalProps {
 }
 
 export default function TorusMenuEditorModal({ onClose, onBack }: TorusMenuEditorModalProps) {
-  const [torusOpen, setTorusOpen] = useState(false);
+  // Initialize torusOpen from localStorage to support toggling
+  const [torusOpen, setTorusOpen] = useState<boolean>(() => {
+    try {
+      const v = window.localStorage.getItem('juicecut.settings.torusOpen');
+      return v === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [duration, setDuration] = useState(getSavedDuration);
   const [sizeGraph, setSizeGraph] = useState<SizeGraphPoint[]>(getSavedSizeGraph);
   const [segmentHandleValues, setSegmentHandleValues] = useState<number[]>(getSavedSegmentHandleValues);
   const [delay, setDelay] = useState(getSavedDelay);
   const [hoverScale, setHoverScale] = useState(getSavedHoverScale);
-  const [closeTorusKeys, setCloseTorusKeys] = useState<string[][]>(() => scGetKeys('closeTorusMenu'));
+  const [closeTorusKeys, setCloseTorusKeys] = useState<string[][]>(() => scGetKeys('toggleTorusMenu'));
   const [editingCloseTorusIndex, setEditingCloseTorusIndex] = useState<number | null>(null);
 
   // Sync shortcut keys when they change (from Settings or other sources)
   useEffect(() => {
     const handler = () => {
-      setCloseTorusKeys(scGetKeys('closeTorusMenu'));
+      setCloseTorusKeys(scGetKeys('toggleTorusMenu'));
     };
     window.addEventListener('juicecut-settings-changed', handler);
     return () => window.removeEventListener('juicecut-settings-changed', handler);
@@ -165,16 +173,16 @@ export default function TorusMenuEditorModal({ onClose, onBack }: TorusMenuEdito
   }, [hoverScale]);
 
   const handleCloseTorus = useCallback(() => {
-    setTorusOpen(false);
+    setTorusOpen(prev => !prev); // Toggle
   }, []);
 
-  // Listen for close torus menu shortcut
+  // Listen for toggle torus menu shortcut
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (isShortcutMatch('closeTorusMenu', e)) {
+      if (isShortcutMatch('toggleTorusMenu', e)) {
         e.preventDefault();
         e.stopPropagation();
-        handleCloseTorus();
+        handleCloseTorus(); // Toggles by setting torusOpen to false
       }
     };
     window.addEventListener('keydown', handler, true);
@@ -216,7 +224,7 @@ export default function TorusMenuEditorModal({ onClose, onBack }: TorusMenuEdito
     }
     if (keys.length > 0) {
       // Update the shortcut
-      const current = scGetKeys('closeTorusMenu');
+      const current = scGetKeys('toggleTorusMenu');
       let next: string[][];
       
       // If we're editing an existing slot (empty or not), update it
@@ -227,16 +235,16 @@ export default function TorusMenuEditorModal({ onClose, onBack }: TorusMenuEdito
         next = [...current, keys];
       }
       
-      scUpdate({ ...scGetKeys('undo'), closeTorusMenu: next } as any);
+      scUpdate({ ...scGetKeys('undo'), toggleTorusMenu: next } as any);
       setCloseTorusKeys(next);
       setEditingCloseTorusIndex(null);
     }
   };
 
   const removeCloseTorusCombination = (index: number) => {
-    const current = scGetKeys('closeTorusMenu');
+    const current = scGetKeys('toggleTorusMenu');
     const next = current.filter((_, i) => i !== index);
-    scUpdate({ ...scGetKeys('undo'), closeTorusMenu: next } as any);
+    scUpdate({ ...scGetKeys('undo'), toggleTorusMenu: next } as any);
     setCloseTorusKeys(next);
   };
 
@@ -285,17 +293,17 @@ export default function TorusMenuEditorModal({ onClose, onBack }: TorusMenuEdito
               />
               <div className="settings-field" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <span style={{ lineHeight: 1.2 }}>Close Torus Menu Shortcut</span>
+                  <span style={{ lineHeight: 1.2 }}>{SHORTCUT_LABELS.toggleTorusMenu}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <button type="button" className="icon-btn" onClick={() => {
-                      const current = scGetKeys('closeTorusMenu');
+                      const current = scGetKeys('toggleTorusMenu');
                       const next = [...current, []];
-                      scUpdate({ ...scGetKeys('undo'), closeTorusMenu: next } as any);
+                      scUpdate({ ...scGetKeys('undo'), toggleTorusMenu: next } as any);
                       setCloseTorusKeys(next);
                     }} title="Add shortcut combination" style={{ padding: 4 }}><Plus size={14} /></button>
                     <button type="button" className="icon-btn" onClick={() => {
-                      scReset('closeTorusMenu');
-                      setCloseTorusKeys(scGetKeys('closeTorusMenu'));
+                      scReset('toggleTorusMenu');
+                      setCloseTorusKeys(scGetKeys('toggleTorusMenu'));
                     }} title="Reset to default shortcuts" style={{ padding: 4 }}><RotateCcw size={14} /></button>
                   </div>
                 </div>

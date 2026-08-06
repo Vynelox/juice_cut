@@ -1,14 +1,23 @@
 ﻿/**
  * Centralized keyboard shortcut management.
  */
-export type ShortcutAction = "undo" | "redo" | "timelineZoomToggle" | "exitModal" | "closeTorusMenu";
+export type ShortcutAction = "undo" | "redo" | "timelineZoomToggle" | "exitModal" | "toggleTorusMenu";
+
+// Shared display labels for shortcut actions (used by Settings and TorusMenuEditor)
+export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
+  undo: "Undo",
+  redo: "Redo",
+  timelineZoomToggle: "Timeline horizontal zoom toggle",
+  exitModal: "Exit modal",
+  toggleTorusMenu: "Toggle torus menu",
+};
 
 const DEFAULT_SHORTCUTS: Record<ShortcutAction, string[][]> = {
   undo: [["ctrl", "z"]],
   redo: [["ctrl", "shift", "z"], ["ctrl", "y"], ["ctrl", "alt", "z"]],
   timelineZoomToggle: [["alt"]],
   exitModal: [["escape"]],
-  closeTorusMenu: [["q"]],
+  toggleTorusMenu: [["q"]],
 };
 
 const STORAGE_KEY = "juicecut.settings.keyboardShortcuts";

@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RotateCcw, Plus, ChevronRight } from 'lucide-react';
 import type { ShortcutAction } from './shortcuts';
-import { getShortcutKeys as scGetKeys, updateShortcuts as scUpdate, resetDefaultShortcuts as scReset } from './shortcuts';
+import { getShortcutKeys as scGetKeys, updateShortcuts as scUpdate, resetDefaultShortcuts as scReset, SHORTCUT_LABELS } from './shortcuts';
 import DraggableModal from './DraggableModal';
 import { OpenTorusMenuEditor } from './TorusMenuEditor';
 import { OpenPlayneedleEditor } from './PlayneedleEditor';
@@ -40,13 +40,7 @@ interface Props {
   initialScroll?: number | null;
 }
 
-const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
-  undo: "Undo",
-  redo: "Redo",
-  timelineZoomToggle: "Timeline horizontal zoom toggle",
-  exitModal: "Exit modal",
-  closeTorusMenu: "Close torus menu",
-};
+// SHORTCUT_LABELS is imported from './shortcuts' for consistency
 
 function loadAllShortcuts(): Record<ShortcutAction, string[][]> {
   return {
@@ -54,7 +48,7 @@ function loadAllShortcuts(): Record<ShortcutAction, string[][]> {
     redo: scGetKeys("redo"),
     timelineZoomToggle: scGetKeys("timelineZoomToggle"),
     exitModal: scGetKeys("exitModal"),
-    closeTorusMenu: scGetKeys("closeTorusMenu"),
+    toggleTorusMenu: scGetKeys("toggleTorusMenu"),
   };
 }
 

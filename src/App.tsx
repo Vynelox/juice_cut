@@ -576,13 +576,13 @@ function AppContent() {
         if (showExport) { e.preventDefault(); setShowExport(false); return; }
         if (showStyle) { e.preventDefault(); handleStyleBackOrClose(); return; }
       }
-      // Close torus menu shortcut
-      if (isShortcutMatch('closeTorusMenu', e)) {
+      // Toggle torus menu shortcut
+      if (isShortcutMatch('toggleTorusMenu', e)) {
         const target = e.target as HTMLElement | null;
         if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
         e.preventDefault();
-        // Dispatch event to close torus menu
-        window.dispatchEvent(new CustomEvent('juicecut-torus-close'));
+        // Dispatch event to toggle torus menu
+        window.dispatchEvent(new CustomEvent('juicecut-torus-toggle'));
       }
     };
     window.addEventListener('keydown', handler, true);
