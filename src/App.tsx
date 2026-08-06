@@ -581,6 +581,8 @@ function AppContent() {
         const target = e.target as HTMLElement | null;
         if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
         e.preventDefault();
+        // Skip if TorusMenuEditor is open — it handles the shortcut itself
+        if (modalManager.isOpen('torusMenuEditor')) return;
         // Dispatch event to toggle torus menu
         window.dispatchEvent(new CustomEvent('juicecut-torus-toggle'));
       }
