@@ -14,6 +14,7 @@ import Timeline from './components/Timeline';
 import RollDialog from './components/RollDialog';
 import ViewerControls from './components/ViewerControls';
 import { OpenSettings } from './components/Settings';
+import { OpenShaderSelector } from './components/shader_selector';
 import { isShortcutMatch } from './components/shortcuts';
 import { parentMap, StylesModal, applyThemeToDocument } from './components/styles';
 import Splitter from './components/Splitter';
@@ -216,6 +217,21 @@ function AppContent() {
     };
     window.addEventListener('juicecut.settings-changed', handler);
     return () => window.removeEventListener('juicecut.settings-changed', handler);
+  }, []);
+
+  // Listen for shader changes from the shader selector
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.shaderName) {
+        const api = (window as any).electronAPI;
+        if (api?.send) {
+          api.send('switch-shader', { shaderName: detail.shaderName });
+        }
+      }
+    };
+    window.addEventListener('juicecut-shader-change', handler);
+    return () => window.removeEventListener('juicecut-shader-change', handler);
   }, []);
 
   useEffect(() => {
@@ -865,6 +881,18 @@ function AppContent() {
           }} title="Style">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2C12 2 5 10 5 15c0 3.866 3.134 7 7 7s7-3.134 7-7c0-5-7-13-7-13z"/>
+            </svg>
+          </button>
+          <button className="icon-btn" onClick={() => {
+            const result = modalManager.requestOpen('shaderSelector');
+            if (!result.allowed) {
+              multipleMenusToast.show();
+              return;
+            }
+            OpenShaderSelector();
+          }} title="Shaders">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2L9.19 8.63 2 9.24l5.46 4.73L6.82 21 12 17.27 17.18 21l-.64-7.26L22 9.24l-7.19-.61z"/>
             </svg>
           </button>
           <button className="icon-btn" onClick={() => {
