@@ -45,6 +45,7 @@ const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   redo: "Redo",
   timelineZoomToggle: "Timeline horizontal zoom toggle",
   exitModal: "Exit modal",
+  closeTorusMenu: "Close torus menu",
 };
 
 function loadAllShortcuts(): Record<ShortcutAction, string[][]> {
@@ -53,6 +54,7 @@ function loadAllShortcuts(): Record<ShortcutAction, string[][]> {
     redo: scGetKeys("redo"),
     timelineZoomToggle: scGetKeys("timelineZoomToggle"),
     exitModal: scGetKeys("exitModal"),
+    closeTorusMenu: scGetKeys("closeTorusMenu"),
   };
 }
 

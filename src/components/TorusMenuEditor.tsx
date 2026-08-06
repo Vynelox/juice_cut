@@ -8,7 +8,8 @@ import { showToast } from './Toast';
 import { modalManager } from '../state/modalManager';
 import TorusMenu from './TorusMenu';
 import { Slider } from './Adjustables';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, Plus } from 'lucide-react';
+import { isShortcutMatch, getShortcutKeys as scGetKeys, updateShortcuts as scUpdate, resetDefaultShortcuts as scReset, type ShortcutAction } from './shortcuts';
 
 // Torus Menu Editor modal dimensions
 const EDITOR_WIDTH = 620; //default 620px, can be wider if needed
@@ -129,6 +130,17 @@ export default function TorusMenuEditorModal({ onClose, onBack }: TorusMenuEdito
   const [segmentHandleValues, setSegmentHandleValues] = useState<number[]>(getSavedSegmentHandleValues);
   const [delay, setDelay] = useState(getSavedDelay);
   const [hoverScale, setHoverScale] = useState(getSavedHoverScale);
+  const [closeTorusKeys, setCloseTorusKeys] = useState<string[][]>(() => scGetKeys('closeTorusMenu'));
+  const [editingCloseTorusIndex, setEditingCloseTorusIndex] = useState<number | null>(null);
+
+  // Sync shortcut keys when they change (from Settings or other sources)
+  useEffect(() => {
+    const handler = () => {
+      setCloseTorusKeys(scGetKeys('closeTorusMenu'));
+    };
+    window.addEventListener('juicecut-settings-changed', handler);
+    return () => window.removeEventListener('juicecut-settings-changed', handler);
+  }, []);
 
   const sortedSizeGraph = useMemo(() => sizeGraph.slice().sort((a, b) => a.time - b.time), [sizeGraph]);
 
@@ -156,6 +168,19 @@ export default function TorusMenuEditorModal({ onClose, onBack }: TorusMenuEdito
     setTorusOpen(false);
   }, []);
 
+  // Listen for close torus menu shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (isShortcutMatch('closeTorusMenu', e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleCloseTorus();
+      }
+    };
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [handleCloseTorus]);
+
   const noop = useCallback(() => {}, []);
   const noopBool = useCallback((_ripple: boolean) => {}, []);
   const noopNumBool = useCallback((_dir: number, _ripple: boolean) => {}, []);
@@ -163,6 +188,57 @@ export default function TorusMenuEditorModal({ onClose, onBack }: TorusMenuEdito
 
   // Delay slider uses logarithmic mapping
   const delaySliderValue = delayToSlider(delay);
+
+  // Format keys for display
+  const formatKeys = (keys: string[]): string => {
+    const sorted = [...keys].sort((a, b) => {
+      const order = ["ctrl", "shift", "alt", "meta"];
+      const ia = order.indexOf(a.toLowerCase());
+      const ib = order.indexOf(b.toLowerCase());
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.localeCompare(b);
+    });
+    return sorted.map(k => k.charAt(0).toUpperCase() + k.slice(1)).join(" + ");
+  };
+
+  const handleCloseTorusKeyDown = (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const keys: string[] = [];
+    if (e.ctrlKey || e.metaKey) keys.push("ctrl");
+    if (e.shiftKey) keys.push("shift");
+    if (e.altKey) keys.push("alt");
+    const key = e.key.toLowerCase();
+    if (key !== "control" && key !== "shift" && key !== "alt" && key !== "meta") {
+      keys.push(key === " " ? "space" : key);
+    }
+    if (keys.length > 0) {
+      // Update the shortcut
+      const current = scGetKeys('closeTorusMenu');
+      let next: string[][];
+      
+      // If we're editing an existing slot (empty or not), update it
+      if (editingCloseTorusIndex !== null) {
+        next = current.map((combo, i) => i === editingCloseTorusIndex ? keys : combo);
+      } else {
+        // Otherwise append a new combination
+        next = [...current, keys];
+      }
+      
+      scUpdate({ ...scGetKeys('undo'), closeTorusMenu: next } as any);
+      setCloseTorusKeys(next);
+      setEditingCloseTorusIndex(null);
+    }
+  };
+
+  const removeCloseTorusCombination = (index: number) => {
+    const current = scGetKeys('closeTorusMenu');
+    const next = current.filter((_, i) => i !== index);
+    scUpdate({ ...scGetKeys('undo'), closeTorusMenu: next } as any);
+    setCloseTorusKeys(next);
+  };
 
   return (
     <DraggableModal
@@ -207,6 +283,77 @@ export default function TorusMenuEditorModal({ onClose, onBack }: TorusMenuEdito
                 onReset={() => setDuration(300)}
                 formatValue={v => `${v}ms`}
               />
+              <div className="settings-field" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <span style={{ lineHeight: 1.2 }}>Close Torus Menu Shortcut</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button type="button" className="icon-btn" onClick={() => {
+                      const current = scGetKeys('closeTorusMenu');
+                      const next = [...current, []];
+                      scUpdate({ ...scGetKeys('undo'), closeTorusMenu: next } as any);
+                      setCloseTorusKeys(next);
+                    }} title="Add shortcut combination" style={{ padding: 4 }}><Plus size={14} /></button>
+                    <button type="button" className="icon-btn" onClick={() => {
+                      scReset('closeTorusMenu');
+                      setCloseTorusKeys(scGetKeys('closeTorusMenu'));
+                    }} title="Reset to default shortcuts" style={{ padding: 4 }}><RotateCcw size={14} /></button>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {closeTorusKeys.map((keys, idx) => {
+                    const isEditing = editingCloseTorusIndex === idx;
+                    return (
+                      <div
+                        key={idx}
+                        tabIndex={0}
+                        onFocus={() => setEditingCloseTorusIndex(idx)}
+                        onBlur={() => setTimeout(() => setEditingCloseTorusIndex(null), 150)}
+                        onKeyDown={handleCloseTorusKeyDown}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          background: isEditing ? 'var(--bg-hover)' : 'var(--bg-elevated)',
+                          border: isEditing ? '1px solid var(--highlight-color)' : '1px solid var(--border-mid)',
+                          borderRadius: 'var(--radius-sm)',
+                          padding: '3px 8px',
+                          cursor: 'pointer',
+                          outline: 'none',
+                          minHeight: 28,
+                        }}
+                        title={isEditing && keys.length === 0 ? "Press keys to assign..." : "Click then press new keys to reassign"}
+                      >
+                        <span style={{ fontSize: 12, color: keys.length > 0 ? 'var(--text-primary)' : 'var(--text-muted)', fontFamily: 'monospace' }}>
+                          {isEditing && keys.length === 0 ? "..." : keys.length > 0 ? formatKeys(keys) : "None"}
+                        </span>
+                        {closeTorusKeys.length > 1 && (
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              removeCloseTorusCombination(idx);
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: 'var(--text-muted)',
+                              cursor: 'pointer',
+                              padding: '0 2px',
+                              fontSize: 13,
+                              lineHeight: 1,
+                              display: 'flex',
+                              alignItems: 'center',
+                            }}
+                            title="Remove this combination"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
               <GraphEditor
                 graph={sizeGraph}
                 onChange={setSizeGraph}
