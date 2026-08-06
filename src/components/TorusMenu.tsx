@@ -10,6 +10,11 @@ import bigWoosh from '../sounds/SFX/big_woosh.wav';
 import smallWoosh from '../sounds/SFX/small_woosh.wav';
 import thock from '../sounds/sfx/thock.wav';
 
+const thock_volume = 0.3
+const bigWoosh_volume = 0.3
+const smallWoosh_volume = 0.9
+
+
 function getSavedHoverScale(): number {
   try {
     const v = window.localStorage.getItem('juicecut.settings.torusHoverScale');
@@ -159,23 +164,68 @@ export default function TorusMenu({
   const easing = easingProp ?? getSavedEasing();
   const delay = delayProp ?? getSavedDelay();
 
-    // 🎵🎶🔊 SOUND EFFECTS: Create audio instances
-  const bigWooshAudio = useRef(new Audio(bigWoosh));
-  const smallWooshAudio = useRef(new Audio(smallWoosh));
-  const thockAudio = useRef(new Audio(thock));
+  // 🪗SOUND EFFECTS: Web Audio API for polyphonic playback
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
   
-  // Set volume (adjust as needed)
+  // Initialize AudioContext and load sounds
   useEffect(() => {
-    bigWooshAudio.current.volume = 0.3;
-    smallWooshAudio.current.volume = 0.2;
-    thockAudio.current.volume = 0.4;
+    const initAudio = async () => {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = ctx;
+      
+      // Load audio files
+      const loadSound = async (url: string, key: string) => {
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+        audioBuffersRef.current.set(key, audioBuffer);
+      };
+      
+      await Promise.all([
+        loadSound(bigWoosh, 'bigWoosh'),
+        loadSound(smallWoosh, 'smallWoosh'),
+        loadSound(thock, 'thock'),
+      ]);
+    };
+    
+    initAudio();
+    
+    return () => {
+      // 🔥 FIX: Don't close the AudioContext on unmount!
+      // Closing it kills sounds that are still playing (like thock on click).
+      // The AudioContext should live for the lifetime of the app.
+      // audioContextRef.current?.close();
+    };
   }, []);
+  
+  // Helper function to play a sound
+  const playSound = (key: string, volume: number = 1.0) => {
+    const ctx = audioContextRef.current;
+    const buffer = audioBuffersRef.current.get(key);
+    
+    if (!ctx || !buffer) return;
+    
+    // Resume context if suspended (browser autoplay policy)
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+    
+    // Create a new source node for each playback (allows overlapping)
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = volume;
+    
+    source.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    source.start(0);
+  };
 
-    // 🔥 Play opening sound when menu mounts
-  useEffect(() => {
-    bigWooshAudio.current.currentTime = 0;
-    bigWooshAudio.current.play().catch(() => {}); // Catch autoplay restrictions
-  }, []);
+  
+
 
   // 🔥 FIX: Use useState to calculate these EXACTLY ONCE per menu mount.
   // This prevents JSON.parse from creating new array references on every render,
@@ -239,6 +289,35 @@ export default function TorusMenu({
   const MAX_SECTORS = 6;
   const sectorAngle = (Math.PI * 2) / MAX_SECTORS;
   const visibleCount = items.length;
+
+  //---------🔊🔊🔊🔊🔊🔊🎤📻📻🎷🎷🎷🪗🪗🪗 PLAYING SOUND -------------...///
+  /*
+    //  simple play on mount (woosh plays once)
+  useEffect(() => {
+    bigWooshAudio.current.currentTime = 0;
+    bigWooshAudio.current.play().catch(() => {}); // Catch autoplay restrictions
+  }, []);
+  */
+
+    // advanced play on mount (several wooshes synced with the sectors animation using delay prop)
+    // 🪗 Play opening sound for each sector as it pops in
+  useEffect(() => {
+    const timeouts: number[] = [];
+    
+    // Schedule a sound for each sector based on its delay
+    for (let i = 0; i < items.length; i++) {
+      const sectorDelay = getSectorDelay(i) * 1000; // Convert to milliseconds
+      const timeoutId = window.setTimeout(() => {
+        playSound('bigWoosh', bigWoosh_volume);
+      }, sectorDelay);
+      timeouts.push(timeoutId);
+    }
+    
+    // Cleanup: clear all timeouts if component unmounts
+    return () => {
+      timeouts.forEach(id => clearTimeout(id));
+    };
+  }, [items.length, delay]);
 
   // Interactive-only: scroll-to-close and background-click-to-close
   const ref = useRef<HTMLDivElement>(null);
@@ -520,9 +599,8 @@ export default function TorusMenu({
   }, [hasSizeGraph, sizeGraph, segmentHandleValues, duration, delay, cx, cy]);
 
   const handleSectorClick = (item: MenuItem) => {
-    // 🔊 Play click sound
-    thockAudio.current.currentTime = 0;
-    thockAudio.current.play().catch(() => {});
+    // 🪗 Play click sound (Web Audio API)
+    playSound('thock', thock_volume);
     
     if (interactive) {
       item.action();
@@ -575,9 +653,8 @@ export default function TorusMenu({
             style={getGroupStyle()}
             onMouseEnter={() => {
               setHoveredIndex(i);
-              // 🔊 Play hover sound
-              smallWooshAudio.current.currentTime = 0;
-              smallWooshAudio.current.play().catch(() => {});
+              // 🪗 Play hover sound (Web Audio API)
+              playSound('smallWoosh', smallWoosh_volume);
             }}
             onMouseLeave={() => setHoveredIndex(null)}
           >
