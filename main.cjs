@@ -274,6 +274,18 @@ class WindowManager {
       }
     });
 
+    ipcMain.on('change-shader', (event, shaderName) => {
+      console.log(`[Main Process] 🔄 Received change-shader: ${shaderName}`);
+      
+      // Replace 'shaderWindow' with whatever variable name you use for your overlay window
+      if (this.shaderWindow && !this.shaderWindow.isDestroyed()) {
+        this.shaderWindow.webContents.send('apply-shader', shaderName);
+        console.log(`[Main Process] ✅ Forwarded apply-shader to shader window`);
+      } else {
+        console.error('[Main Process] ❌ shaderWindow is not available!');
+      }
+    });
+
     ipcMain.on('stop-drag', () => {
       this.isDragging = false;
     });
@@ -349,6 +361,19 @@ class WindowManager {
         this.shaderWindow.webContents.send('shader-colors-update', colorArray);
       }
     });
+
+    // Forward shader change requests from app_window to shader_window
+    /*
+    ipcMain.on('switch-shader', (_event, shaderName) => {
+      console.log('📥 Received switch-shader request:', shaderName);
+      if (this.shaderWindow && !this.shaderWindow.isDestroyed()) {
+        this.shaderWindow.webContents.send('switch-shader', shaderName);
+        console.log('📤 Forwarded switch-shader to shader_window');
+      } else {
+        console.warn('⚠️ Shader window not available, cannot switch shader');
+      }
+    });
+    */
 
     // Fallback: get-window-source-id for non-shader mode
     ipcMain.handle('get-window-source-id', () => {

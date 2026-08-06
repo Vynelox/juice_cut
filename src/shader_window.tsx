@@ -30,8 +30,25 @@ console.log('PARSE: MediaStreamTrackProcessor declaration complete');
 // ─── Import the shader module ───────────────────────────────────────────────
 // Change this import to use a different shader set.
 // Each shader folder exports { createShaderRenderer, ShaderRenderer }.
-import { createShaderRenderer } from './shaders/default_shader/index';
+
+
 console.log('PARSE: ShaderRenderer imported');
+
+// Dynamic import helper for switching shaders at runtime
+
+// 😎🕶️🕶️ DYNAMIC SHADER LOADER
+async function loadShaderRenderer(shaderName: string) {
+  try {
+    // Vite will automatically bundle all matching index.ts files in the shaders folder
+    const module = await import(`./shaders/${shaderName}/index.ts`);
+    return module.createShaderRenderer;
+  } catch (e) {
+    console.error(`[ShaderWindow] Failed to load shader "${shaderName}", falling back to default_shader`, e);
+    const module = await import(`./shaders/default_shader/index.ts`);
+    return module.createShaderRenderer;
+  }
+}
+
 
 async function main() {
   console.log('running async function main()');
@@ -92,31 +109,63 @@ async function main() {
 
     console.log('Overlay: WebGL2 context created successfully');
 
-    // ─── Create the shader renderer ──────────────────────────────────────────
-    const renderer = createShaderRenderer();
-    const initialized = renderer.init(gl!, { customCursor });
-    console.log('CHECKPOINT: ShaderRenderer.init() =', initialized ? 'success' : 'failed');
-    if (!initialized) {
-      console.error('Overlay: Failed to initialize shader renderer');
-      return;
-    }
-    console.log('Overlay: Shader renderer initialized successfully');
+    // ─── Create the shader renderer ─────────────────────────────────────────
+    const api = (window as any).electronAPI;
+    
+    let renderer: any = null;
+    let currentShaderName = 'default_shader'; // Can be updated via localStorage later
 
-    // Set canvas pixel size to window size
-    function resizeCanvas() {
+    async function initializeRenderer(shaderName: string) {
+      console.log(`[ShaderWindow] Initializing shader: ${shaderName}`);
+      
+      // 1. Destroy old renderer to free GPU memory (if it exists)
+      if (renderer) {
+        renderer.destroy(gl!);
+      }
+
+      // 2. Load and create new renderer dynamically
+      const createShaderRenderer = await loadShaderRenderer(shaderName);
+      renderer = createShaderRenderer();
+      
+      const initialized = renderer.init(gl!, { customCursor });
+      console.log('CHECKPOINT: ShaderRenderer.init() =', initialized ? 'success' : 'failed');
+      if (!initialized) {
+        console.error('Overlay: Failed to initialize shader renderer');
+        return false;
+      }
+      console.log('Overlay: Shader renderer initialized successfully');
+
+      // 3. Resize to current canvas size
       const dpr = window.devicePixelRatio || 1;
       const w = window.innerWidth;
       const h = window.innerHeight;
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
       renderer.resize(gl!, canvas.width, canvas.height);
+      
+      return true;
     }
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+
+    // 4. Initial load
+    await initializeRenderer(currentShaderName);
+
+    // 5. Handle window resizing
+    window.addEventListener('resize', () => {
+      if (renderer) {
+        const dpr = window.devicePixelRatio || 1;
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        canvas.width = Math.floor(w * dpr);
+        canvas.height = Math.floor(h * dpr);
+        renderer.resize(gl!, canvas.width, canvas.height);
+      }
+    });
     console.log('CHECKPOINT: resizeCanvas configured');
 
+    //--------------------------------------------------------
+
     // Notify main process we're ready
-    const api = (window as any).electronAPI;
+    
     console.log('CHECKPOINT: electronAPI =', api ? 'available' : 'null');
     if (api) {
       console.log('Overlay: Notifying main process that shader window is ready...');
@@ -137,6 +186,29 @@ async function main() {
       });
       console.log('Custom cursor: listening for mouse position');
     }
+
+    // ── Shader switching via IPC from app window ─────────────────────────────
+    // 6. 🔥 LISTEN FOR SHADER CHANGES FROM MAIN PROCESS
+    if (api) {
+      api.on('apply-shader', async (newShaderName: string) => {
+        console.log(`[ShaderWindow] Received request to change shader to: ${newShaderName}`);
+        currentShaderName = newShaderName;
+        
+        // Just call our robust initializeRenderer function!
+        // It already handles destroying the old renderer.
+        // And loadShaderRenderer() already has a built-in catch block that 
+        // automatically falls back to 'default_shader' if the new one fails.
+        const success = await initializeRenderer(newShaderName);
+        
+        if (!success) {
+          console.warn('[ShaderWindow] Shader change failed, but fallback should have activated.');
+        } else {
+          console.log(`[ShaderWindow] ✅ Successfully switched to: ${newShaderName}`);
+        }
+      });
+    }
+    
+
 
     // ── Theme Colors State ─────────────────────────────────────────────────────
     // Default to black, will be overwritten by app window immediately

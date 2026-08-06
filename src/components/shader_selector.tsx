@@ -40,7 +40,7 @@ async function getAvailableShaders(): Promise<string[]> {
     
     // Fallback: return known shaders
     console.log('[ShaderSelector] Using fallback shader list');
-    return ['default_shader', 'shader2'];
+    return ['default_shader', 'glitch'];
   } catch {
     return ['default_shader'];
   }
@@ -90,6 +90,14 @@ export default function ShaderSelectorModal({ onClose }: { onClose: () => void }
     getAvailableShaders().then(shaderList => {
       if (!cancelled) {
         setShaders(shaderList);
+        
+        // If the currently active shader doesn't exist in the new list, fall back to the first available shader
+        if (shaderList.length > 0 && !shaderList.includes(activeShader)) {
+          const fallbackShader = shaderList[0];
+          console.log(`[ShaderSelector] Active shader "${activeShader}" not found, falling back to "${fallbackShader}"`);
+          setActiveShader(fallbackShader);
+          window.dispatchEvent(new CustomEvent('juicecut-shader-change', { detail: { shaderName: fallbackShader } }));
+        }
       }
     });
     
@@ -98,6 +106,14 @@ export default function ShaderSelectorModal({ onClose }: { onClose: () => void }
       getAvailableShaders().then(shaderList => {
         if (!cancelled) {
           setShaders(shaderList);
+          
+          // If the currently active shader doesn't exist in the new list, fall back to the first available shader
+          if (shaderList.length > 0 && !shaderList.includes(activeShader)) {
+            const fallbackShader = shaderList[0];
+            console.log(`[ShaderSelector] Active shader "${activeShader}" not found, falling back to "${fallbackShader}"`);
+            setActiveShader(fallbackShader);
+            window.dispatchEvent(new CustomEvent('juicecut-shader-change', { detail: { shaderName: fallbackShader } }));
+          }
         }
       });
     };
@@ -106,7 +122,7 @@ export default function ShaderSelectorModal({ onClose }: { onClose: () => void }
       cancelled = true;
       window.removeEventListener('juicecut-shaders-updated', handler);
     };
-  }, []);
+  }, [activeShader]);
 
   useEffect(() => {
     try {
@@ -115,9 +131,17 @@ export default function ShaderSelectorModal({ onClose }: { onClose: () => void }
   }, [activeShader]);
 
   const handleShaderSelect = (shaderName: string) => {
+    console.log(`[ShaderSelector] Selected shader: ${shaderName}`);
     setActiveShader(shaderName);
-    // Dispatch event to notify main process to switch shader
-    window.dispatchEvent(new CustomEvent('juicecut-shader-change', { detail: { shaderName } }));
+    
+    // 🔥 CRITICAL: Send IPC message to the main process
+    const api = (window as any).electronAPI;
+    if (api?.send) {
+      api.send('change-shader', shaderName);
+      console.log(`[ShaderSelector] ✅ Sent IPC 'change-shader' for: ${shaderName}`);
+    } else {
+      console.error('[ShaderSelector] ❌ electronAPI.send not found!');
+    }
   };
 
   return (
