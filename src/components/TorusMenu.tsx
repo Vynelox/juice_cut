@@ -566,7 +566,15 @@ export default function TorusMenu({
               width={72}
               height={32}
               className="torus-sector"
-              style={{ cursor: 'pointer', overflow: 'visible', ...getSectorStyle(i) }}
+              style={{ 
+                cursor: 'pointer', 
+                overflow: 'visible',
+                // 🔥 FIX: Scale the content when hovered
+                transform: hoveredIndex === i ? `scale(${hoverScale})` : 'scale(1)',
+                transformOrigin: `${labelX}px ${labelY}px`,
+                transition: 'transform 0.15s ease-out',
+                ...getSectorStyle(i) 
+              }}
               onClick={(e) => { e.stopPropagation(); handleSectorClick(item); }}
             >
               <div
