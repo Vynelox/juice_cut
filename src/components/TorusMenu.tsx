@@ -6,6 +6,9 @@ import { useEffect, useState, useRef, ReactNode } from 'react';
 import { Scissors, ChevronLeft, ChevronRight, Move } from 'lucide-react';
 import { getSavedSizeGraph, SizeGraphPoint } from './graph';
 import { evaluateGraphWithHandles, getSavedSegmentHandleValues } from '../utils/torusGraphEasing';
+import bigWoosh from '../sounds/SFX/big_woosh.wav';
+import smallWoosh from '../sounds/SFX/small_woosh.wav';
+import thock from '../sounds/sfx/thock.wav';
 
 function getSavedHoverScale(): number {
   try {
@@ -155,6 +158,24 @@ export default function TorusMenu({
   const duration = durationProp ?? getSavedDuration();
   const easing = easingProp ?? getSavedEasing();
   const delay = delayProp ?? getSavedDelay();
+
+    // 🎵🎶🔊 SOUND EFFECTS: Create audio instances
+  const bigWooshAudio = useRef(new Audio(bigWoosh));
+  const smallWooshAudio = useRef(new Audio(smallWoosh));
+  const thockAudio = useRef(new Audio(thock));
+  
+  // Set volume (adjust as needed)
+  useEffect(() => {
+    bigWooshAudio.current.volume = 0.3;
+    smallWooshAudio.current.volume = 0.2;
+    thockAudio.current.volume = 0.4;
+  }, []);
+
+    // 🔥 Play opening sound when menu mounts
+  useEffect(() => {
+    bigWooshAudio.current.currentTime = 0;
+    bigWooshAudio.current.play().catch(() => {}); // Catch autoplay restrictions
+  }, []);
 
   // 🔥 FIX: Use useState to calculate these EXACTLY ONCE per menu mount.
   // This prevents JSON.parse from creating new array references on every render,
@@ -499,6 +520,10 @@ export default function TorusMenu({
   }, [hasSizeGraph, sizeGraph, segmentHandleValues, duration, delay, cx, cy]);
 
   const handleSectorClick = (item: MenuItem) => {
+    // 🔊 Play click sound
+    thockAudio.current.currentTime = 0;
+    thockAudio.current.play().catch(() => {});
+    
     if (interactive) {
       item.action();
       onClose();
@@ -548,7 +573,12 @@ export default function TorusMenu({
             key={i}
             ref={el => { sectorGroupRefs.current[i] = el; }}
             style={getGroupStyle()}
-            onMouseEnter={() => setHoveredIndex(i)}
+            onMouseEnter={() => {
+              setHoveredIndex(i);
+              // 🔊 Play hover sound
+              smallWooshAudio.current.currentTime = 0;
+              smallWooshAudio.current.play().catch(() => {});
+            }}
             onMouseLeave={() => setHoveredIndex(null)}
           >
             <path
