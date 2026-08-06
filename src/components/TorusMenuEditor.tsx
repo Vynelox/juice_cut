@@ -26,6 +26,41 @@ const TORUS_GRAPH_CONFIG: GraphConfig = {
   padding: GRAPH_PADDING_LEFT,
 };
 
+// Convert saved segment handle values (-1 to 1) back to pixel Y offsets for GraphEditor
+function segmentHandleValuesToOffsets(
+  values: number[],
+  graph: SizeGraphPoint[],
+  config: GraphConfig,
+  graphWidth: number = config.width
+): number[] {
+  if (!values || values.length === 0) return [];
+  const sorted = graph.slice().sort((a, b) => a.time - b.time);
+  const plotWidth = Math.max(0, graphWidth - config.padding * 2);
+  const plotHeight = Math.max(0, config.height - config.padding * 2);
+  
+  return values.map((handleValue, index) => {
+    const pointA = sorted[index];
+    const pointB = sorted[index + 1];
+    if (!pointA || !pointB) return 0;
+    
+    const svgPointA = { x: config.padding + pointA.time * plotWidth, y: config.padding + (1 - pointA.size) * plotHeight };
+    const svgPointB = { x: config.padding + pointB.time * plotWidth, y: config.padding + (1 - pointB.size) * plotHeight };
+    
+    const minY = Math.min(svgPointA.y, svgPointB.y);
+    const maxY = Math.max(svgPointA.y, svgPointB.y);
+    const handlerMinY = (2 * minY + svgPointA.y + svgPointB.y) / 4;
+    const handlerMaxY = (2 * maxY + svgPointA.y + svgPointB.y) / 4;
+    const range = handlerMaxY - handlerMinY;
+    if (range <= 0) return (svgPointA.y + svgPointB.y) / 2;
+    
+    const midpointY = (svgPointA.y + svgPointB.y) / 2;
+    const segmentDirection = Math.sign(pointB.size - pointA.size);
+    const handlerY = midpointY - (handleValue * range * segmentDirection) / 2;
+    
+    return Math.max(handlerMinY, Math.min(handlerMaxY, handlerY));
+  });
+}
+
 function getSavedDuration(): number {
   try {
     const v = window.localStorage.getItem('juicecut.settings.torusDuration');
@@ -369,6 +404,7 @@ export default function TorusMenuEditorModal({ onClose, onBack }: TorusMenuEdito
                 config={TORUS_GRAPH_CONFIG}
                 Y_label="size"
                 X_label="time"
+                initialEasingOffsets={segmentHandleValuesToOffsets(segmentHandleValues, sizeGraph, TORUS_GRAPH_CONFIG)}
               />
               <div className="settings-field" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>

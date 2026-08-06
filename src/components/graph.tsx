@@ -210,6 +210,7 @@ export default function GraphEditor({
   Y_label = 'value',
   X_label = 'time',
   onEasingChange,
+  initialEasingOffsets,
 }: {
   graph: SizeGraphPoint[];
   onChange: Dispatch<SetStateAction<SizeGraphPoint[]>>;
@@ -217,10 +218,11 @@ export default function GraphEditor({
   Y_label?: string;
   X_label?: string;
   onEasingChange?: (offsets: number[]) => void;
+  initialEasingOffsets?: number[];
 }) {
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const [svgWidth, setSvgWidth] = useState(config.width);
-  const [easingOffsets, setEasingOffsets] = useState<number[]>([]);
+  const [easingOffsets, setEasingOffsets] = useState<number[]>(() => initialEasingOffsets ?? []);
   const [dragSensitivity, setDragSensitivity] = useState(DEFAULT_SENSITIVITY);
   const [showSensitivityDisplay, setShowSensitivityDisplay] = useState(false);
   const sensitivityHideTimeoutRef = useRef<number | null>(null);
@@ -321,6 +323,9 @@ export default function GraphEditor({
   }, [handleUndo, handleRedo]);
   
   useEffect(() => {
+    // Only reset to defaults if no saved offsets were provided
+    if (initialEasingOffsets && initialEasingOffsets.length > 0) return;
+    
     const initialOffsets = sortedGraph.map((point, index) => {
       if (index < sortedGraph.length - 1) {
         const nextPoint = sortedGraph[index + 1];
@@ -338,7 +343,7 @@ export default function GraphEditor({
       return 0;
     });
     setEasingOffsets(initialOffsets);
-  }, [sortedGraph.length, svgWidth, config]);
+  }, [sortedGraph.length, svgWidth, config, initialEasingOffsets]);
   
   const graphPath = useMemo(() => buildSmoothCurvePath(config, sortedGraph, svgWidth, easingOffsets), [sortedGraph, svgWidth, easingOffsets, config]);
 
