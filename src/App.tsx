@@ -929,9 +929,6 @@ function AppContent() {
         } as React.CSSProperties}
       >
         <div className="workspace-panel-mediapool" onDrop={handleDropMediaPool} onDragOver={handleDragOverMediaPool}>
-          <div className="viewer-header">
-            <span className="panel-title">Media Pool</span>
-          </div>
           {!leftCollapsed && (
             <MediaPool items={Array.from(mediaItems.values())} selectedMediaId={selectedMediaId} onSelect={setSelectedMediaId} onAdd={handleAddMedia} onRemove={handleRemoveMedia} />
           )}

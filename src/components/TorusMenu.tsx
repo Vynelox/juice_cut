@@ -10,9 +10,9 @@ import bigWoosh from '../sounds/SFX/big_woosh.wav';
 import smallWoosh from '../sounds/SFX/small_woosh.wav';
 import thock from '../sounds/sfx/thock.wav';
 
-const thock_volume = 0.3
-const bigWoosh_volume = 0.3
-const smallWoosh_volume = 0.9
+const thock_volume = 0.7
+const bigWoosh_volume = 0.7
+const smallWoosh_volume = 0.7
 
 
 function getSavedHoverScale(): number {
